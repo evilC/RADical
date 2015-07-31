@@ -19,6 +19,7 @@ class MyClient extends RADical {
 	
 	; Called after Initialization - Assemble your GUI, set up your hotkeys etc here
 	Main(){
+		/*
 		; Set the current tab - analagous to Gui, Tab, Settings
 		this.RADical.Gui("Tab", "Settings")
 		
@@ -32,6 +33,8 @@ class MyClient extends RADical {
 		; Define a hotkey and specify the default key and what routine to run when it is pressed
 		fn := this.SendMyStuff.Bind(this)
 		this.RADical.Hotkey.Add("F12", fn)
+		*/
+		;this.RADical.Tabs.Settings.Gui("Add", "Edit",, "Edit " A_Index)
 	}
 	
 	; User-defined routine to call when any of the persistent settings change
@@ -105,16 +108,100 @@ class _radical {
 			Gui, % hMain ":Tab", % A_Index
 			Gui, % hMain ":Add",Text, % "w" this._GuiSize.w - 40 " h" this._GuiSize.h - 70 " hwndhGuiArea"
 			
-			Gui, New, hwndhTab
-			Gui,% hTab ":+Owner"
-			Gui, % hTab ":Color", red
-			Gui, % hTab ":+parent" hGuiArea " -Border"
-			Gui, % hTab ":Show", % "x-5 y-5 w" this._GuiSize.w - 40 " h" this._GuiSize.h - 70
-			this._hwnds.Tabs[this._TabIndex[A_Index]] := hTab
-			
+			this.Tabs[tabs[A_Index]] := new this._Gui(this, hGuiArea)
+						
 			;Test edit box - remove
-			Gui, % hTab ":Add", Edit, , Edit %A_Index%
+			this.Tabs[tabs[A_Index]].Gui("Add", "Edit",, "Edit " A_Index)
 		}
+	}
+	
+	class _Gui {
+		__New(root, hwndParent){
+			this._root := root
+			
+			Gui, New, hwndhTab
+			this._hwnd := hTab
+			Gui,% this._hwnd ":+Owner"
+			Gui, % this._hwnd ":Color", red
+			Gui, % this._hwnd ":+parent" hwndParent " -Border"
+			Gui, % this._hwnd ":Show", % "x-5 y-5 w" this._root._GuiSize.w - 40 " h" this._root._GuiSize.h - 70
+		}
+		
+		; Wrapper for Gui commands
+		Gui(cmd, aParams*){
+			if (cmd = "add"){
+				; Create GuiControl
+				obj := new this._GuiControl(this, aParams*)
+				return obj
+			} else if (cmd = "new"){
+				;obj := new _Gui(this, aParams*)
+				;return obj
+			}
+		}
+		
+		; ============================= GUI Control ===========================
+		class _GuiControl {
+			__New(parent, ctrltype, options := "", text := ""){
+				this._Parent := parent
+				this._CtrlType := ctrltype
+				this._PersistenceName := 0
+				this._glabel := 0
+				this._DefaultValue := ""
+				this._updating := 0		; Set to 1 when writing to GuiControl, to stop it writing to the settings file
+				
+				Gui, % this._parent._hwnd ":Add", % ctrltype, % "hwndhwnd " options, % text
+				this._hwnd := hwnd
+				
+				; Hook into OnChange event
+				fn := this._OnChange.bind(this)
+				GuiControl % "+g", % this._hwnd, % fn
+			}
+			
+			__Get(aParam){
+				if (aParam = "value"){
+					return this._parent.GuiControlGet(,this)
+				}
+			}
+			
+			__Set(aParam, aValue){
+				if (aParam = "value"){
+					return this._parent.GuiControl(,this, aValue)
+				}
+			}
+		
+			_OnChange(){
+				; Update persistent settings
+				if (this._PersistenceName){
+					; Write settings to file
+					; ToDo: Make Asynchronous
+					if (!this._updating){
+						this._parent.IniWrite(this.value, this._parent.CurrentProfile, this._PersistenceName, this._DefaultValue)
+					}
+					
+					; Call user glabel
+					if (ObjHasKey(this,"_glabel") && this._glabel != 0){
+						;%this._glabel%() ; ahk v2
+						this._glabel.() ; ahk v1
+					}
+				}
+			}
+			
+			; Makes a Gui Control persistent - value is saved in settings file
+			MakePersistent(Name, Default := "", glabel := 0){
+				; ToDo: Check for uniqueness of name
+				this._PersistenceName := Name
+				this._glabel := glabel
+				if (Default != ""){
+					this._DefaultValue := Default
+				}
+				this._updating := 1
+				val := this._parent.IniRead(this._parent.CurrentProfile, this._PersistenceName, this._DefaultValue)
+				this.value := val
+				this._updating := 0
+			}
+			
+		}
+
 	}
 	
 	; -------------- Client routines ----------------
@@ -136,6 +223,7 @@ class _radical {
 		this._CurrentTabName := tabs[1]
 		this._CurrentTabIndex := 1
 	}
+	
 }
 
 GuiClose:
