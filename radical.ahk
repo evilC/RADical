@@ -1,13 +1,21 @@
 #SingleInstance force
 OutputDebug, DBGVIEWCLEAR
 
-test := new test()
+; ==================== TEST SCRIPT =================
+test := new MyClient()
+return
 
-class test extends Radical {
+class MyClient extends RADical {
+	; Initialize
 	Init(){
-		this.MyEdit := this.radical.Gui("Add", "Edit", "xm ym", "")
-		fn := this.SettingChanged.bind(this)
-		this.MyEdit.MakePersistent("MyEdit", "1", fn)
+		this._myname := "Client" ; debugging
+		this.RADical.Tabs(["Settings","Second"])
+	}
+	
+	Main(){
+		;this.MyEdit := this.RADical.Gui("Add", "Edit", "xm ym", "")
+		;fn := this.SettingChanged.bind(this)
+		;this.MyEdit.MakePersistent("MyEdit", 1, fn)
 	}
 	
 	SettingChanged(){
@@ -15,153 +23,77 @@ class test extends Radical {
 	}
 }
 
-; =====================================================================================================
 
-class Radical {
+; ===================== RADICAL LIB =================
+
+class RADical {
 	__New(){
-		this.radical := new this._radical()
+		this.RADical := new _radical(this)
 		this.Init()
-		this.radical.Show()
+		this.RADical._GuiCreate()
+		this.Main()
+	}
+}
+
+class _radical {
+	__New(client){
+		this._myname := "Library" ; debugging
+		this._client := client
+		
+		this._hwnds := {}
+		this._GuiSize := {w: 300, h: 150}	; Default size
 	}
 	
-	; Designed to be overridden
-	Init(){
-		MsgBox % "You have not overridden the Init() class"
-		ExitApp
-	}
-	
-	; ================== MAIN CLASS ==============
-	class _radical {
-		__New(){
-			this.CurrentProfile := "Test Profile"
-			
-			Gui, new, hwndhGui
-			this._hwnd := hGui
-			SplitPath, % A_ScriptName,,,,ScriptName
-			this._ScriptName .= ScriptName ".ini"
-		}
+	_GuiCreate(){
+		; Create Main GUI Window
+		Gui, New, HwndhMain
+		this._hwnds.MainWindow := hMain
+		Gui, % this._hwnds.MainWindow ":Show", % "x0 y0 w" this._GuiSize.w " h" this._GuiSize.h
 		
-		Show(){
-			Gui, % this._hwnd ":Show"			
-		}
+		; Add Status Bar
+		Gui, % this._hwnds.MainWindow ":Add", StatusBar,, Blah blah blah
 		
-		; Wrapper for Gui commands
-		Gui(cmd, aParams*){
-			if (cmd = "add"){
-				; Create GuiControl
-				obj := new this._GuiControl(this, aParams*)
-				return obj
-			} else if (cmd = "new"){
-				;obj := new _Gui(this, aParams*)
-				;return obj
+		; Create list of Tabs - client script should have defined required number of tabs by now
+		tabs := ""
+		Loop % this._TabIndex.length() {
+			if (A_Index != 1){
+				tabs .= "|"
 			}
-		}
-		
-		; Wraps GuiControlGet
-		GuiControlGet(cmd := "", ctrl := "", param4 := ""){
-			GuiControlGet, ret, % this._hwnd ":" cmd, % ctrl._hwnd, % Param4
-			return ret
-		}
-		
-		; Wraps GuiControl to use hwnds and function binding etc
-		GuiControl(cmd := "", ctrl := "", Param3 := ""){
-			m := SubStr(cmd,1,1)
-			if (m = "+" || m = "-"){
-				; Options
-				o := SubStr(cmd,2,1)
-				if (o = "g"){
-					; Bind g-label to _glabel property
-					fn := Param3.Bind(this)
-					ctrl._glabel := fn
-					return this
-				}
-			} else {
-				GuiControl, % this._hwnd ":" cmd, % ctrl._hwnd, % Param3
-				return this
+			tabs .= this._TabIndex[A_Index]
+			if (A_Index = this._CurrentTabIndex){
+				tabs .= "|"
 			}
 		}
 
-		PrefixHwnd(cmd){
-			return this._hwnd ":" cmd
-		}
+		; Add Tabs
+		Gui, % hMain ":Add", Tab2, % "-Wrap hwndhTabs xm ym h" this._GuiSize.h-35 " w" this._GuiSize.w-20, % tabs
 
-		IniRead(Section, key, Default){
-			;IniRead, val, % this._ScriptName, % Section, % this._PersistenceName, %A_Space%
-			IniRead, val, % this._ScriptName, % Section, % key, % A_Space
-			if (val = ""){
-				val := Default
-			}
-			return val
+		Loop % this._TabIndex.length() {
+			Gui, % hMain ":Tab", % A_Index
+			Gui, % hMain ":Add",Text, % "w" this._GuiSize.w - 40 " h" this._GuiSize.h - 70 " hwndhGuiArea"
+			
+			Gui, New, hwndhTab
+			Gui,% hTab ":+Owner"
+			Gui, % hTab ":Color", red
+			Gui, % hTab ":+parent" hGuiArea " -Border"
+			Gui, % hTab ":Add", Edit, , Edit %A_Index%
+			Gui, % hTab ":Show", % "x-5 y-5 w" this._GuiSize.w - 40 " h" this._GuiSize.h - 70
+			this._hwnds.Tabs[this._TabIndex[A_Index]] := hTab
+		}
+	}
+	
+	Tabs(tabs){
+		this._TabIndex := []
+		this.Tabs := {}
+		tabs.push("Bindings")
+		tabs.push("Profiles")
+		tabs.push("About")
+		Loop % tabs.length() {
+			this.Tabs[tabs[A_Index]] := {}
+			this._TabIndex.push(tabs[A_Index])
 		}
 		
-		IniWrite(value, section, key, Default){
-			OutputDebug, % "DEFAULT: *" default "*"
-			if (value = Default){
-				IniDelete, % this._ScriptName, % Section, % key
-			} else {
-				IniWrite, % value, % this._ScriptName, % Section, % key
-			}
-		}
-		
-		; ============================= GUI Control ===========================
-		class _GuiControl {
-			__New(parent, ctrltype, options := "", text := ""){
-				this._Parent := parent
-				this._CtrlType := ctrltype
-				this._PersistenceName := 0
-				this._glabel := 0
-				this._DefaultValue := ""
-				this._updating := 0		; Set to 1 when writing to GuiControl, to stop it writing to the settings file
-				
-				Gui, % this._parent.PrefixHwnd("Add"), % ctrltype, % "hwndhwnd " options, % text
-				this._hwnd := hwnd
-				
-				; Hook into OnChange event
-				fn := this._OnChange.bind(this)
-				GuiControl % "+g", % this._hwnd, % fn
-			}
-			
-			__Get(aParam){
-				if (aParam = "value"){
-					return this._parent.GuiControlGet(,this)
-				}
-			}
-			
-			__Set(aParam, aValue){
-				if (aParam = "value"){
-					return this._parent.GuiControl(,this, aValue)
-				}
-			}
-		
-			_OnChange(){
-				; Update persistent settings
-				if (this._PersistenceName){
-					; Write settings to file
-					; ToDo: Make Asynchronous
-					if (!this._updating){
-						this._parent.IniWrite(this.value, this._parent.CurrentProfile, this._PersistenceName, this._DefaultValue)
-					}
-					
-					; Call user glabel
-					if (ObjHasKey(this,"_glabel") && this._glabel != 0){
-						%this._glabel%()
-					}
-				}
-			}
-			
-			MakePersistent(Name, Default := "", glabel := 0){
-				this._PersistenceName := Name
-				this._glabel := glabel
-				if (Default != ""){
-					this._DefaultValue := Default
-				}
-				this._updating := 1
-				val := this._parent.IniRead(this._parent.CurrentProfile, this._PersistenceName, this._DefaultValue)
-				this.value := val
-				this._updating := 0
-			}
-			
-		}
-		
+		this._CurrentTabName := tabs[1]
+		this._CurrentTabIndex := 1
 	}
 }
