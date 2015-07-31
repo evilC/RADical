@@ -137,3 +137,6 @@ class _radical {
 		this._CurrentTabIndex := 1
 	}
 }
+
+GuiClose:
+	ExitApp
