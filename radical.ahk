@@ -271,6 +271,14 @@ class _radical {
 				this._hwnd := hDDl
 				fn := this.OptionSelected.Bind(this)
 				GuiControl % "+g", % this._hwnd, % fn
+				
+				this._MouseLookup := {}
+				this._MouseLookup[0x201] := { name: "LButton", event: 1 }
+				this._MouseLookup[0x202] := { name: "LButton", event: 0 }
+				this._MouseLookup[0x204] := { name: "RButton", event: 1 }
+				this._MouseLookup[0x205] := { name: "RButton", event: 0 }
+				this._MouseLookup[0x207] := { name: "MButton", event: 1 }
+				this._MouseLookup[0x208] := { name: "MButton", event: 0 }
 			}
 			
 			OptionSelected(){
@@ -303,8 +311,8 @@ class _radical {
 				
 				fn := this._BindCallback(this._ProcessKHook,"Fast",,this)
 				this._hHookKeybd := this._SetWindowsHookEx(WH_KEYBOARD_LL, fn)
-				;fn := _BindCallback(this._ProcessMHook,"Fast",,this)
-				;this._hHookMouse := this._SetWindowsHookEx(WH_MOUSE_LL, fn)
+				fn := this._BindCallback(this._ProcessMHook,"Fast",,this)
+				this._hHookMouse := this._SetWindowsHookEx(WH_MOUSE_LL, fn)
 				Loop {
 					if (this._BindMode = 0){
 						break
@@ -312,6 +320,7 @@ class _radical {
 					Sleep 10
 				}	
 				this._UnhookWindowsHookEx(this._hHookKeybd)
+				this._UnhookWindowsHookEx(this._hHookMouse)
 				Gui,  % hPrompt ":Destroy"
 				
 				out := ""
@@ -366,6 +375,7 @@ class _radical {
 			_ProcessKHook(nCode, wParam, lParam){
 				; KBDLLHOOKSTRUCT structure: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644967%28v=vs.85%29.aspx
 				; KeyboardProc function: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644984(v=vs.85).aspx
+				static last_down := 0	; used to filter key repeats
 				Critical
 				
 				keycode := new _Struct(WinStructs.KBDLLHOOKSTRUCT,wParam+0)
@@ -387,12 +397,23 @@ class _radical {
 					event := 1
 				}
 				
+				; We now know the keycode and the event - filter out repeat down events
+				if (event){
+					if (last_down = keycode){
+						return 1
+					}
+					last_down := keycode
+				}
+
+				/*
 				; SetWindowsHookEx repeats down events - filter those out
 				if (event){
 					dupe := 0
 					Loop % this._SelectedInput.length() {
+						;OutputDebug % "checking " this._SelectedInput[A_Index]
 						if (this._SelectedInput[A_Index] = keycode){
 							dupe := 1
+							;OutputDebug % "DUPE"
 							break
 						}
 					}
@@ -401,8 +422,9 @@ class _radical {
 						return 1
 					}
 				}
-
+				*/
 				
+			
 				modifier := 0
 				if (keycode == 27){
 					; Quit Bind Mode on Esc
@@ -412,11 +434,19 @@ class _radical {
 					if ( (keycode >= 160 && keycode <= 165) || (keycode >= 91 && keycode <= 93) ) {
 						modifier := 1
 					} else {
-						if (this._KeyCount && event := 1){
-							; do not allow, too many non-modifier keys
+						if (this._KeyCount){
+							; do not allow, >1 non-modifier keys
 							OutputDebug, % "Blocked - too many non-modifiers: " this._KeyCount
-							; abort and block key - do not process up or down event
-							return 1
+							
+							if (event){
+								; warning beep on key down
+								SoundBeep
+								; abort and block key - do not process up or down event
+								return 1
+							} else {
+								; surplus key released
+								this._KeyCount--
+							}
 						}
 					}
 				}
@@ -427,7 +457,7 @@ class _radical {
 				if (event){
 					; Key went down
 					if (!modifier){
-						;this._KeyCount++
+						this._KeyCount++
 					}
 					this._SelectedInput.push(keycode)
 				} else {
@@ -438,7 +468,77 @@ class _radical {
 				;Return this._CallNextHookEx(nCode, wParam, lParam) ; allow key through
 				return 1	; block key
 			}
+			
+			_ProcessMHook(nCode, wParam, lParam){
+				; MSLLHOOKSTRUCT structure: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644970(v=vs.85).aspx
+				static WM_LBUTTONDOWN := 0x0201, WM_LBUTTONUP := 0x0202 , WM_RBUTTONDOWN := 0x0204, WM_RBUTTONUP := 0x0205, WM_MBUTTONDOWN := 0x0207, WM_MBUTTONUP := 0x0208, WM_MOUSEHWHEEL := x020E, WM_MOUSEWHEEL := 0x020A, WM_XBUTTONDOWN := 0x020B, WM_XBUTTONUP := 0x020C
+				Critical
+				OutputDebug % lookup_table[nCode]
+				if (nCode = 512){
+					; Mouse Movement - pass through
+					Return this._CallNextHookEx(nCode, wParam, lParam)
+				}
+				
+				found := 0
+				for key, value in this._MouseLookup {
+					if (key = nCode){
+						found := 1
+						OutputDebug L/M/R
+						break
+					}
+				}
+				OutputDebug % "MOUSE: " nCode
+				/*
+				; Filter out mouse move and other unwanted messages
+				If ( wParam = WM_LBUTTONDOWN || wParam = WM_LBUTTONUP || wParam = WM_RBUTTONDOWN || wParam = WM_RBUTTONUP || wParam = WM_MBUTTONDOWN || wParam = WM_MBUTTONUP || wParam = WM_MOUSEWHEEL || wParam = WM_MOUSEHWHEEL || wParam = WM_XBUTTONDOWN || wParam = WM_XBUTTONUP ) {
+					lp := new _Struct(WinStructs.MSLLHOOKSTRUCT,lParam)
+					if (wParam = WM_MOUSEWHEEL || wParam = WM_MOUSEHWHEEL){
+						mouseData := new _Struct("Short sht",lp.mouseData_high[""]).sht
+					} else {
+						mouseData := lp.mouseData_high
+					}
+					;ToolTip % "md: " mouseData
+					
+					flags := lp.flags
+					
+					vk := HotClass.MOUSE_WPARAM_LOOKUP[wParam]
+					if (wParam = WM_LBUTTONUP || wParam = WM_RBUTTONUP || wParam = WM_MBUTTONUP ){
+						; Normally supported up event
+						event := 0
+					} else if (wParam = WM_MOUSEWHEEL || wParam = WM_MOUSEHWHEEL) {
+						; Mouse wheel has no up event
+						vk := HotClass.MOUSE_WPARAM_LOOKUP[wParam]
+						; event = 1 for up, -1 for down
+						if (mouseData < 0){
+							event := 1
+						} else {
+							event := -1
+						}
+					} else if (wParam = WM_XBUTTONDOWN || wParam = WM_XBUTTONUP ){
+						if (wParam = WM_XBUTTONUP){
+							debug := "me"
+						}
+						vk := 3 + mouseData
+						event := (wParam = WM_XBUTTONDOWN)
+					} else {
+						; Only down left
+						event := 1
+					}
+					;tooltip % "type: " HotClass.INPUT_TYPES[HotClass.INPUT_TYPE_M] "`ncode: " vk "`nevent: " event
+					if (this._ProcessInput({type: HotClass.INPUT_TYPE_M, input: { vk: vk}, event: event})){
+						; Return 1 to block this input
+						; ToDo: call _ProcessInput via another thread? We only have 300ms to return 1 else it wont get blocked?
+						return 1
+					}
+				} else if (wParam != 0x200){
+					debug := "here"
+				}
+				Return this._CallNextHookEx(nCode, wParam, lParam)
+				*/
+			}
+
 		}
+		
 		
 		; Client command to add a hotkey
 		AddHotkey(name, callback, options, default){
