@@ -67,7 +67,7 @@ class MyClient extends RADical {
 	
 	; User-defined routine to call when any of the persistent settings change
 	SettingChanged(){
-		ToolTip % "Edit box contents: " this.MyEdit.value
+		;ToolTip % "Edit box contents: " this.MyEdit.value
 	}
 	
 	; The user-defined hotkey changed state
@@ -471,10 +471,12 @@ class _radical {
 			
 			_ProcessMHook(nCode, wParam, lParam){
 				; MSLLHOOKSTRUCT structure: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644970(v=vs.85).aspx
-				static WM_LBUTTONDOWN := 0x0201, WM_LBUTTONUP := 0x0202 , WM_RBUTTONDOWN := 0x0204, WM_RBUTTONUP := 0x0205, WM_MBUTTONDOWN := 0x0207, WM_MBUTTONUP := 0x0208, WM_MOUSEHWHEEL := x020E, WM_MOUSEWHEEL := 0x020A, WM_XBUTTONDOWN := 0x020B, WM_XBUTTONUP := 0x020C
+				static WM_LBUTTONDOWN := 0x0201, WM_LBUTTONUP := 0x0202 , WM_RBUTTONDOWN := 0x0204, WM_RBUTTONUP := 0x0205, WM_MBUTTONDOWN := 0x0207, WM_MBUTTONUP := 0x0208, WM_MOUSEHWHEEL := 0x20E, WM_MOUSEWHEEL := 0x020A, WM_XBUTTONDOWN := 0x020B, WM_XBUTTONUP := 0x020C
+				;static WM_MOUSEHWHEEL := x020E, WM_MOUSEWHEEL := 0x020A, WM_XBUTTONDOWN := 0x020B, WM_XBUTTONUP := 0x020C
 				Critical
-				OutputDebug % lookup_table[nCode]
-				if (nCode = 512){
+				
+				out := "Mouse: " nCode " "
+				if (nCode = 0x200){
 					; Mouse Movement - pass through
 					Return this._CallNextHookEx(nCode, wParam, lParam)
 				}
@@ -483,11 +485,32 @@ class _radical {
 				for key, value in this._MouseLookup {
 					if (key = nCode){
 						found := 1
-						OutputDebug L/M/R
+						out .= value.name ", event: " value.event
 						break
 					}
 				}
-				OutputDebug % "MOUSE: " nCode
+				
+				if (nCode = WM_MOUSEHWHEEL || nCode = WM_MOUSEWHEEL){
+					SoundBeep
+					; Mouse Wheel
+					if (nCode = WM_MOUSEWHEEL){
+						out .= "WheelU/D"
+					} else {
+						out .= "WheelL/R"
+					}
+				} else if (nCode = WM_XBUTTONDOWN || nCode = WM_XBUTTONUP){
+					if (nCode = WM_XBUTTONDOWN){
+						event := 1
+					} else {
+						event := 0
+					}
+					; X Buttons
+					out .= "XButton1/2, event: " event
+				}
+				
+				OutputDebug % out
+				
+				
 				/*
 				; Filter out mouse move and other unwanted messages
 				If ( wParam = WM_LBUTTONDOWN || wParam = WM_LBUTTONUP || wParam = WM_RBUTTONDOWN || wParam = WM_RBUTTONUP || wParam = WM_MBUTTONDOWN || wParam = WM_MBUTTONUP || wParam = WM_MOUSEWHEEL || wParam = WM_MOUSEHWHEEL || wParam = WM_XBUTTONDOWN || wParam = WM_XBUTTONUP ) {
