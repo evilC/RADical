@@ -19,22 +19,19 @@ class MyClient extends RADical {
 	
 	; Called after Initialization - Assemble your GUI, set up your hotkeys etc here
 	Main(){
-		/*
 		; Set the current tab - analagous to Gui, Tab, Settings
-		this.RADical.Gui("Tab", "Settings")
+		;this.RADical.Gui("Tab", "Settings")
 		
 		; Add an Edit box called MyEdit. Coords are relative to the tab canvas, not the whole GUI
-		this.MyEdit := this.RADical.Gui("Add", "Edit", "xm ym", "")
+		this.MyEdit := this.RADical.Tabs.Settings.Gui("Add", "Edit", "w100", "")
 		
 		; Tell RADical to save the value of the Edit box in an INI file (under the key name "MyEdit"), and call a routine any time it changes.
 		fn := this.SettingChanged.bind(this)
-		this.MyEdit.MakePersistent("MyEdit", 1, fn)
+		this.MyEdit.MakePersistent("MyEdit", "Settings Editbox", fn)
 		
 		; Define a hotkey and specify the default key and what routine to run when it is pressed
-		fn := this.SendMyStuff.Bind(this)
-		this.RADical.Hotkey.Add("F12", fn)
-		*/
-		;this.RADical.Tabs.Settings.Gui("Add", "Edit",, "Edit " A_Index)
+		;fn := this.SendMyStuff.Bind(this)
+		;this.RADical.Hotkey.Add("F12", fn)
 	}
 	
 	; User-defined routine to call when any of the persistent settings change
@@ -77,6 +74,12 @@ class _radical {
 		
 		this._hwnds := {}
 		this._GuiSize := {w: 300, h: 150}	; Default size
+		
+		SplitPath, % A_ScriptName,,,,ScriptName
+		this._ScriptName := ScriptName ".ini"
+		
+		; Bodge for now
+		this.CurrentProfile := "Default"
 	}
 	
 	; Create the main GUI
@@ -106,23 +109,22 @@ class _radical {
 
 		Loop % this._TabIndex.length() {
 			Gui, % hMain ":Tab", % A_Index
+			; Create Frame for Gui, as we cannot get Hwnd of client area of each tab
 			Gui, % hMain ":Add",Text, % "w" this._GuiSize.w - 40 " h" this._GuiSize.h - 70 " hwndhGuiArea"
-			
-			this.Tabs[tabs[A_Index]] := new this._Gui(this, hGuiArea)
-						
-			;Test edit box - remove
-			this.Tabs[tabs[A_Index]].Gui("Add", "Edit",, "Edit " A_Index)
+			; Add Gui for tab contents
+			this.Tabs[this._TabIndex[A_Index]] := new this._CGui(this, hGuiArea)
 		}
 	}
 	
-	class _Gui {
+	; Wraps Child GUIs into a class
+	class _CGui {
 		__New(root, hwndParent){
 			this._root := root
 			
-			Gui, New, hwndhTab
-			this._hwnd := hTab
+			Gui, New, hwndhGui
+			this._hwnd := hGui
 			Gui,% this._hwnd ":+Owner"
-			Gui, % this._hwnd ":Color", red
+			;Gui, % this._hwnd ":Color", red
 			Gui, % this._hwnd ":+parent" hwndParent " -Border"
 			Gui, % this._hwnd ":Show", % "x-5 y-5 w" this._root._GuiSize.w - 40 " h" this._root._GuiSize.h - 70
 		}
@@ -131,7 +133,7 @@ class _radical {
 		Gui(cmd, aParams*){
 			if (cmd = "add"){
 				; Create GuiControl
-				obj := new this._GuiControl(this, aParams*)
+				obj := new this._CGuiControl(this, aParams*)
 				return obj
 			} else if (cmd = "new"){
 				;obj := new _Gui(this, aParams*)
@@ -139,8 +141,32 @@ class _radical {
 			}
 		}
 		
+		; Wraps GuiControl to use hwnds and function binding etc
+		GuiControl(cmd := "", ctrl := "", Param3 := ""){
+			m := SubStr(cmd,1,1)
+			if (m = "+" || m = "-"){
+				; Options
+				o := SubStr(cmd,2,1)
+				if (o = "g"){
+					; Bind g-label to _glabel property
+					fn := Param3.Bind(this)
+					ctrl._glabel := fn
+					return this
+				}
+			} else {
+				GuiControl, % this._hwnd ":" cmd, % ctrl._hwnd, % Param3
+				return this
+			}
+		}
+
+		; Wraps GuiControlGet
+		GuiControlGet(cmd := "", ctrl := "", param4 := ""){
+			GuiControlGet, ret, % this._hwnd ":" cmd, % ctrl._hwnd, % Param4
+			return ret
+		}
+		
 		; ============================= GUI Control ===========================
-		class _GuiControl {
+		class _CGuiControl {
 			__New(parent, ctrltype, options := "", text := ""){
 				this._Parent := parent
 				this._CtrlType := ctrltype
@@ -175,7 +201,7 @@ class _radical {
 					; Write settings to file
 					; ToDo: Make Asynchronous
 					if (!this._updating){
-						this._parent.IniWrite(this.value, this._parent.CurrentProfile, this._PersistenceName, this._DefaultValue)
+						this._parent.IniWrite(this.value, this._parent._root.CurrentProfile, this._PersistenceName, this._DefaultValue)
 					}
 					
 					; Call user glabel
@@ -195,12 +221,33 @@ class _radical {
 					this._DefaultValue := Default
 				}
 				this._updating := 1
-				val := this._parent.IniRead(this._parent.CurrentProfile, this._PersistenceName, this._DefaultValue)
+				val := this._parent.IniRead(this._parent._root.CurrentProfile, this._PersistenceName, this._DefaultValue)
 				this.value := val
 				this._updating := 0
 			}
 			
 		}
+		
+		; --------- INI Reading / Writing
+		IniRead(Section, key, Default){
+			;IniRead, val, % this._ScriptName, % Section, % this._PersistenceName, %A_Space%
+			IniRead, val, % this._root._ScriptName, % Section, % key, % A_Space
+			if (val = ""){
+				val := Default
+			}
+			return val
+		}
+		
+		IniWrite(value, section, key, Default){
+			OutputDebug, % "DEFAULT: *" default "*"
+			if (value = Default){
+				IniDelete, % this._root._ScriptName, % Section, % key
+			} else {
+				OutputDebug, % "UPDATE - " this._parent._ScriptName
+				IniWrite, % value, % this._root._ScriptName, % Section, % key
+			}
+		}
+
 
 	}
 	
