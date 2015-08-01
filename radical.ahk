@@ -371,7 +371,7 @@ class _radical {
 				return GetKeyName(Format("vk{:x}", keycode))
 			}
 			
-			; Process Keyboard messages from Hooks and feed _ProcessInput
+			; Process Keyboard messages from Hooks
 			_ProcessKHook(nCode, wParam, lParam){
 				; KBDLLHOOKSTRUCT structure: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644967%28v=vs.85%29.aspx
 				; KeyboardProc function: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644984(v=vs.85).aspx
@@ -469,10 +469,19 @@ class _radical {
 				return 1	; block key
 			}
 			
+			; Process Mouse messages from Hooks
 			_ProcessMHook(nCode, wParam, lParam){
+				/*
+				typedef struct tagMSLLHOOKSTRUCT {
+				  POINT     pt;
+				  DWORD     mouseData;
+				  DWORD     flags;
+				  DWORD     time;
+				  ULONG_PTR dwExtraInfo;
+				}
+				*/
 				; MSLLHOOKSTRUCT structure: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644970(v=vs.85).aspx
 				static WM_LBUTTONDOWN := 0x0201, WM_LBUTTONUP := 0x0202 , WM_RBUTTONDOWN := 0x0204, WM_RBUTTONUP := 0x0205, WM_MBUTTONDOWN := 0x0207, WM_MBUTTONUP := 0x0208, WM_MOUSEHWHEEL := 0x20E, WM_MOUSEWHEEL := 0x020A, WM_XBUTTONDOWN := 0x020B, WM_XBUTTONUP := 0x020C
-				;static WM_MOUSEHWHEEL := x020E, WM_MOUSEWHEEL := 0x020A, WM_XBUTTONDOWN := 0x020B, WM_XBUTTONUP := 0x020C
 				Critical
 				
 				out := "Mouse: " nCode " "
@@ -490,74 +499,42 @@ class _radical {
 					}
 				}
 				
-				if (nCode = WM_MOUSEHWHEEL || nCode = WM_MOUSEWHEEL){
-					SoundBeep
-					; Mouse Wheel
-					if (nCode = WM_MOUSEWHEEL){
-						out .= "WheelU/D"
-					} else {
-						out .= "WheelL/R"
+				if (!found){
+					; Find HiWord of mouseData from Struct
+					; HotkeyIt - help! See mouseData at https://msdn.microsoft.com/en-us/library/windows/desktop/ms644970(v=vs.85).aspx
+					;lp := new _Struct(WinStructs.MSLLHOOKSTRUCT,lParam)
+					;if (nCode = WM_MOUSEWHEEL || nCode = WM_MOUSEHWHEEL){
+					;	mouseData := new _Struct("Short sht",lp.mouseData_high[""]).sht
+					;} else {
+					;	mouseData := lp.mouseData_high
+					;}
+					mouseData := 1 ; bodge for now
+					
+					if (nCode = WM_MOUSEHWHEEL || nCode = WM_MOUSEWHEEL){
+						; Mouse Wheel - mouseData indicate direction (up/down)
+						if (nCode = WM_MOUSEWHEEL){
+							out .= "Wheel"
+							if (mouseData > 1){
+								out .= "U"
+							} else {
+								out .= "D"
+							}
+						} else {
+							out .= "WheelL/R"
+						}
+					} else if (nCode = WM_XBUTTONDOWN || nCode = WM_XBUTTONUP){
+						; X Buttons - mouseData indicates Xbutton 1 or Xbutton2
+						if (nCode = WM_XBUTTONDOWN){
+							event := 1
+						} else {
+							event := 0
+						}
+						out .= "XButton" mouseData ", event: " event
 					}
-				} else if (nCode = WM_XBUTTONDOWN || nCode = WM_XBUTTONUP){
-					if (nCode = WM_XBUTTONDOWN){
-						event := 1
-					} else {
-						event := 0
-					}
-					; X Buttons
-					out .= "XButton1/2, event: " event
 				}
 				
 				OutputDebug % out
 				
-				
-				/*
-				; Filter out mouse move and other unwanted messages
-				If ( wParam = WM_LBUTTONDOWN || wParam = WM_LBUTTONUP || wParam = WM_RBUTTONDOWN || wParam = WM_RBUTTONUP || wParam = WM_MBUTTONDOWN || wParam = WM_MBUTTONUP || wParam = WM_MOUSEWHEEL || wParam = WM_MOUSEHWHEEL || wParam = WM_XBUTTONDOWN || wParam = WM_XBUTTONUP ) {
-					lp := new _Struct(WinStructs.MSLLHOOKSTRUCT,lParam)
-					if (wParam = WM_MOUSEWHEEL || wParam = WM_MOUSEHWHEEL){
-						mouseData := new _Struct("Short sht",lp.mouseData_high[""]).sht
-					} else {
-						mouseData := lp.mouseData_high
-					}
-					;ToolTip % "md: " mouseData
-					
-					flags := lp.flags
-					
-					vk := HotClass.MOUSE_WPARAM_LOOKUP[wParam]
-					if (wParam = WM_LBUTTONUP || wParam = WM_RBUTTONUP || wParam = WM_MBUTTONUP ){
-						; Normally supported up event
-						event := 0
-					} else if (wParam = WM_MOUSEWHEEL || wParam = WM_MOUSEHWHEEL) {
-						; Mouse wheel has no up event
-						vk := HotClass.MOUSE_WPARAM_LOOKUP[wParam]
-						; event = 1 for up, -1 for down
-						if (mouseData < 0){
-							event := 1
-						} else {
-							event := -1
-						}
-					} else if (wParam = WM_XBUTTONDOWN || wParam = WM_XBUTTONUP ){
-						if (wParam = WM_XBUTTONUP){
-							debug := "me"
-						}
-						vk := 3 + mouseData
-						event := (wParam = WM_XBUTTONDOWN)
-					} else {
-						; Only down left
-						event := 1
-					}
-					;tooltip % "type: " HotClass.INPUT_TYPES[HotClass.INPUT_TYPE_M] "`ncode: " vk "`nevent: " event
-					if (this._ProcessInput({type: HotClass.INPUT_TYPE_M, input: { vk: vk}, event: event})){
-						; Return 1 to block this input
-						; ToDo: call _ProcessInput via another thread? We only have 300ms to return 1 else it wont get blocked?
-						return 1
-					}
-				} else if (wParam != 0x200){
-					debug := "here"
-				}
-				Return this._CallNextHookEx(nCode, wParam, lParam)
-				*/
 			}
 
 		}
