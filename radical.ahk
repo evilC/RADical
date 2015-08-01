@@ -59,8 +59,8 @@ class MyClient extends RADical {
 		this.MyEdit.MakePersistent("MyEdit", "Settings Editbox", fn)
 		
 		; Define a hotkey and specify the default key and what routine to run when it is pressed
-		;fn := this.SendMyStuff.Bind(this)
-		;this.RADical.Hotkey.Add("F12", fn)
+		fn := this.SendMyStuff.Bind(this)
+		this.RADical.Tabs.Settings.AddHotkey("SendStuff", fn, "xm y50", "F12")
 	}
 	
 	; User-defined routine to call when any of the persistent settings change
@@ -258,6 +258,44 @@ class _radical {
 			
 		}
 		
+		; ----------------------------- Hotkey GuiControl class ---------------------------
+		class _CHotkeyControl {
+			static MenuText := "||Wild|PassThrough|Remove"
+			__New(parent, name, callback, options := "", default := ""){
+				this.value := ""
+				
+				this._parent := parent
+				Gui, % parent._hwnd ":Add", DDL, % "hwndhDDL AltSubmit " options, % "(UnBound)" this.MenuText
+				this._hwnd := hDDl
+				fn := this.OptionSelected.Bind(this)
+				GuiControl % "+g", % this._hwnd, % fn
+			}
+			
+			OptionSelected(){
+				GuiControlGet, option,, % this._hwnd
+				if (option = 1){
+					; Bind Mode
+					ToolTip Bind MODE
+					
+				} else if (option = 2){
+					ToolTip Wild Option Changed
+				} else if (option = 3){
+					ToolTip PassThrough Option Changed
+				} else if (option = 4){
+					ToolTip Remove Binding
+				}
+				SoundBeep
+				GuiControl, Choose, % this._hwnd, 1
+			}
+		}
+		
+		; Client command to add a hotkey
+		AddHotkey(name, callback, options, default){
+			hk := new this._CHotkeyControl(this, name, callback, options, default)
+			return hk
+		}
+
+		
 		; --------- INI Reading / Writing -----------
 		IniRead(Section, key, Default){
 			;IniRead, val, % this._ScriptName, % Section, % this._PersistenceName, %A_Space%
@@ -278,7 +316,6 @@ class _radical {
 			}
 		}
 
-
 	}
 	
 	; -------------- Client routines ----------------
@@ -289,7 +326,6 @@ class _radical {
 	Tabs(tabs){
 		this._TabIndex := []
 		this.Tabs := {}
-		tabs.push("Bindings")
 		tabs.push("Profiles")
 		tabs.push("About")
 		Loop % tabs.length() {
