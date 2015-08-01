@@ -1,5 +1,7 @@
 #SingleInstance force
 OutputDebug, DBGVIEWCLEAR
+#include <_Struct>
+#include <WinStructs>
 
 /*
 RADical - A Rapid Application Development for AutoHotkey
@@ -276,6 +278,7 @@ class _radical {
 				if (option = 1){
 					; Bind Mode
 					ToolTip Bind MODE
+					this._BindMode()
 					
 				} else if (option = 2){
 					ToolTip Wild Option Changed
@@ -284,8 +287,151 @@ class _radical {
 				} else if (option = 4){
 					ToolTip Remove Binding
 				}
-				SoundBeep
 				GuiControl, Choose, % this._hwnd, 1
+			}
+			
+			_BindMode(){
+				static WH_KEYBOARD_LL := 13, WH_MOUSE_LL := 14
+
+				this._BindMode := 1
+				this._SelectedInput := []
+				this._KeyCount := 0
+				
+				fn := this._BindCallback(this._ProcessKHook,"Fast",,this)
+				this._hHookKeybd := this._SetWindowsHookEx(WH_KEYBOARD_LL, fn)
+				;fn := _BindCallback(this._ProcessMHook,"Fast",,this)
+				;this._hHookMouse := this._SetWindowsHookEx(WH_MOUSE_LL, fn)
+				Loop {
+					if (this._BindMode = 0){
+						break
+					}
+					Sleep 10
+				}	
+				this._UnhookWindowsHookEx(this._hHookKeybd)
+				
+				out := ""
+				Loop % this._SelectedInput.length(){
+					if (A_Index > 1){
+						out .= ","
+					}
+					out .= this._GetKeyName(this._SelectedInput[A_Index])
+				}
+				MsgBox % "You hit keys: " out
+			}
+			
+			; _BindCallback by GeekDude
+			; ToDo: Should be standard way of doing now? remove?
+			_BindCallback(Params*)
+			{
+				if IsObject(Params)
+				{
+					this := {}
+					this.Function := Params[1]
+					this.Options := Params[2]
+					this.ParamCount := Params[3]
+					Params.Remove(1, 3)
+					this.Params := Params
+					if (this.ParamCount == "")
+						this.ParamCount := IsFunc(this.Function)-1 - Floor(Params.MaxIndex())
+					return RegisterCallback(A_ThisFunc, this.Options, this.ParamCount, Object(this))
+				}
+				else
+				{
+					this := Object(A_EventInfo)
+					MyParams := [this.Params*]
+					Loop, % this.ParamCount
+						MyParams.Insert(NumGet(Params+0, (A_Index-1)*A_PtrSize))
+					return this.Function.(MyParams*)
+				}
+			}
+
+			_SetWindowsHookEx(idHook, pfn){
+				Return DllCall("SetWindowsHookEx", "Ptr", idHook, "Uint", pfn, "Uint", DllCall("GetModuleHandle", "Uint", 0, "Ptr"), "Uint", 0, "Ptr")
+			}
+			
+			_UnhookWindowsHookEx(idHook){
+				Return DllCall("UnhookWindowsHookEx", "Ptr", idHook)
+			}
+			
+			_GetKeyName(keycode){
+				return GetKeyName(Format("vk{:x}", keycode))
+			}
+			
+			; Process Keyboard messages from Hooks and feed _ProcessInput
+			_ProcessKHook(nCode, wParam, lParam){
+				; KBDLLHOOKSTRUCT structure: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644967%28v=vs.85%29.aspx
+				; KeyboardProc function: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644984(v=vs.85).aspx
+				Critical
+				
+				keycode := new _Struct(WinStructs.KBDLLHOOKSTRUCT,wParam+0)
+				keycode := keycode.vkCode
+				
+				; Find the key code and whether key went up/down
+				if (nCode = 0x100) || (nCode = 0x101) {
+					; WM_KEYDOWN || WM_KEYUP message received
+					; Normal keys / Release of ALT
+					if (nCode = 260){
+						; L/R ALT released
+						event := 0
+					} else {
+						; Down event message is 0x100, up is 0x100
+						event := abs(nCode - 0x101)
+					}
+				} else if (nCode = 260){
+					; Alt keys pressed
+					event := 1
+				}
+				
+				; SetWindowsHookEx repeats down events - filter those out
+				if (event){
+					dupe := 0
+					Loop % this._SelectedInput.length() {
+						if (this._SelectedInput[A_Index] = keycode){
+							dupe := 1
+							break
+						}
+					}
+					if (dupe){
+						; Exit and block key
+						return 1
+					}
+				}
+
+				
+				modifier := 0
+				if (keycode == 27){
+					; Quit Bind Mode on Esc
+					this._BindMode := 0
+				} else {
+					; Determine if key is modifier or normal key
+					if ( (keycode >= 160 && keycode <= 165) || (keycode >= 91 && keycode <= 93) ) {
+						modifier := 1
+					} else {
+						if (this._KeyCount && event := 1){
+							; do not allow, too many non-modifier keys
+							OutputDebug, % "Blocked - too many non-modifiers: " this._KeyCount
+							; abort and block key - do not process up or down event
+							return 1
+						}
+					}
+				}
+
+				OutputDebug, % "Key Code: " keycode ", event: " event ", name: " GetKeyName(Format("vk{:x}", keycode)) ", modifier: " modifier
+
+				; We now have all the info we need, process the event
+				if (event){
+					; Key went down
+					if (!modifier){
+						;this._KeyCount++
+					}
+					this._SelectedInput.push(keycode)
+				} else {
+					; Key went up
+					this._BindMode := 0
+				}
+
+				;Return this._CallNextHookEx(nCode, wParam, lParam) ; allow key through
+				return 1	; block key
 			}
 		}
 		
