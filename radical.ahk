@@ -277,7 +277,7 @@ class _radical {
 				GuiControlGet, option,, % this._hwnd
 				if (option = 1){
 					; Bind Mode
-					ToolTip Bind MODE
+					;ToolTip Bind MODE
 					this._BindMode()
 					
 				} else if (option = 2){
@@ -297,6 +297,10 @@ class _radical {
 				this._SelectedInput := []
 				this._KeyCount := 0
 				
+				Gui, new, hwndhPrompt -Border +AlwaysOnTop
+				Gui, % hPrompt ":Add", Text, w300 h100 Center, BIND MODE`n`nPress the desired key combination.`n`nBinding ends when you release a key.`nPress Esc to exit.
+				Gui,  % hPrompt ":Show"
+				
 				fn := this._BindCallback(this._ProcessKHook,"Fast",,this)
 				this._hHookKeybd := this._SetWindowsHookEx(WH_KEYBOARD_LL, fn)
 				;fn := _BindCallback(this._ProcessMHook,"Fast",,this)
@@ -308,6 +312,7 @@ class _radical {
 					Sleep 10
 				}	
 				this._UnhookWindowsHookEx(this._hHookKeybd)
+				Gui,  % hPrompt ":Destroy"
 				
 				out := ""
 				Loop % this._SelectedInput.length(){
