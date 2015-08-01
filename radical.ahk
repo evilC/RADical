@@ -1,7 +1,36 @@
 #SingleInstance force
 OutputDebug, DBGVIEWCLEAR
 
-; ==================== TEST SCRIPT =================
+/*
+RADical - A Rapid Application Development for AutoHotkey
+
+ToDo:
+* Hotkey GuiControl
+Allow end users to select input / output keys via a GuiControl
+
+* Profiles system
+Save sets of persistent settings and allow switching.
+Allow Auto switching of profiles based upon active application
+
+* Callbacks for events
+eg Tab Changed, Profile Changed
+
+* Update notification system
+Check text file at URL for library / client script versions
+
+* Scrollbar support
+Tab contents should be scrollable
+
+* Window Resizing
+Anchor type system
+
+* Help System
+Tooltips?
+Help page?
+
+*/
+
+; ================================================================= TEST SCRIPT =================================
 test := new MyClient()
 return
 
@@ -23,7 +52,7 @@ class MyClient extends RADical {
 		;this.RADical.Gui("Tab", "Settings")
 		
 		; Add an Edit box called MyEdit. Coords are relative to the tab canvas, not the whole GUI
-		this.MyEdit := this.RADical.Tabs.Settings.Gui("Add", "Edit", "w100", "")
+		this.MyEdit := this.RADical.Tabs.Settings.Gui("Add", "Edit", "w100")
 		
 		; Tell RADical to save the value of the Edit box in an INI file (under the key name "MyEdit"), and call a routine any time it changes.
 		fn := this.SettingChanged.bind(this)
@@ -52,7 +81,7 @@ class MyClient extends RADical {
 }
 
 
-; ===================== RADICAL LIB =================
+; ==================================================== RADICAL LIB =======================================================
 
 ; Create a class for the client script to derive from, that configures it and starts it up
 class RADical {
@@ -116,6 +145,7 @@ class _radical {
 		}
 	}
 	
+	; ----------------------------- GUI class ---------------------------
 	; Wraps Child GUIs into a class
 	class _CGui {
 		__New(root, hwndParent){
@@ -165,7 +195,7 @@ class _radical {
 			return ret
 		}
 		
-		; ============================= GUI Control ===========================
+		; ----------------------------- GUI Control class ---------------------------
 		class _CGuiControl {
 			__New(parent, ctrltype, options := "", text := ""){
 				this._Parent := parent
@@ -228,7 +258,7 @@ class _radical {
 			
 		}
 		
-		; --------- INI Reading / Writing
+		; --------- INI Reading / Writing -----------
 		IniRead(Section, key, Default){
 			;IniRead, val, % this._ScriptName, % Section, % this._PersistenceName, %A_Space%
 			IniRead, val, % this._root._ScriptName, % Section, % key, % A_Space
