@@ -1,7 +1,5 @@
 #SingleInstance force
 OutputDebug, DBGVIEWCLEAR
-#include <_Struct>
-#include <WinStructs>
 
 /*
 RADical - A Rapid Application Development for AutoHotkey
@@ -301,7 +299,7 @@ class _radical {
 			_BindMode(){
 				static WH_KEYBOARD_LL := 13, WH_MOUSE_LL := 14
 
-				this._BindMode := 1
+				this._BindModeState := 1
 				this._SelectedInput := []
 				this._KeyCount := 0
 				
@@ -309,12 +307,10 @@ class _radical {
 				Gui, % hPrompt ":Add", Text, w300 h100 Center, BIND MODE`n`nPress the desired key combination.`n`nBinding ends when you release a key.`nPress Esc to exit.
 				Gui,  % hPrompt ":Show"
 				
-				fn := this._BindCallback(this._ProcessKHook,"Fast",,this)
-				this._hHookKeybd := this._SetWindowsHookEx(WH_KEYBOARD_LL, fn)
-				fn := this._BindCallback(this._ProcessMHook,"Fast",,this)
-				this._hHookMouse := this._SetWindowsHookEx(WH_MOUSE_LL, fn)
+				this._hHookKeybd := this._SetWindowsHookEx(WH_KEYBOARD_LL, RegisterCallback(this._ProcessKHook,"Fast",,&this)) ; fn)
+				this._hHookMouse := this._SetWindowsHookEx(WH_MOUSE_LL, RegisterCallback(this._ProcessMHook,"Fast",,&this)) ; fn)
 				Loop {
-					if (this._BindMode = 0){
+					if (this._BindModeState = 0){
 						break
 					}
 					Sleep 10
@@ -333,38 +329,16 @@ class _radical {
 				MsgBox % "You hit keys: " out
 			}
 			
-			; _BindCallback by GeekDude
-			; ToDo: Should be standard way of doing now? remove?
-			_BindCallback(Params*)
-			{
-				if IsObject(Params)
-				{
-					this := {}
-					this.Function := Params[1]
-					this.Options := Params[2]
-					this.ParamCount := Params[3]
-					Params.Remove(1, 3)
-					this.Params := Params
-					if (this.ParamCount == "")
-						this.ParamCount := IsFunc(this.Function)-1 - Floor(Params.MaxIndex())
-					return RegisterCallback(A_ThisFunc, this.Options, this.ParamCount, Object(this))
-				}
-				else
-				{
-					this := Object(A_EventInfo)
-					MyParams := [this.Params*]
-					Loop, % this.ParamCount
-						MyParams.Insert(NumGet(Params+0, (A_Index-1)*A_PtrSize))
-					return this.Function.(MyParams*)
-				}
-			}
-
 			_SetWindowsHookEx(idHook, pfn){
-				Return DllCall("SetWindowsHookEx", "Ptr", idHook, "Uint", pfn, "Uint", DllCall("GetModuleHandle", "Uint", 0, "Ptr"), "Uint", 0, "Ptr")
+				Return DllCall("SetWindowsHookEx", "Ptr", idHook, "Ptr", pfn, "Uint", DllCall("GetModuleHandle", "Uint", 0, "Ptr"), "Uint", 0, "Ptr")
 			}
 			
 			_UnhookWindowsHookEx(idHook){
 				Return DllCall("UnhookWindowsHookEx", "Ptr", idHook)
+			}
+			
+			_CallNextHookEx(nCode, wParam, lParam, hHook := 0){
+				Return DllCall("CallNextHookEx", "Uint", hHook, "int", nCode, "Uint", wParam, "Uint", lParam)
 			}
 			
 			_GetKeyName(keycode){
@@ -372,27 +346,35 @@ class _radical {
 			}
 			
 			; Process Keyboard messages from Hooks
-			_ProcessKHook(nCode, wParam, lParam){
+			_ProcessKHook(wParam, lParam){
 				; KBDLLHOOKSTRUCT structure: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644967%28v=vs.85%29.aspx
 				; KeyboardProc function: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644984(v=vs.85).aspx
+				
+				; ToDo:
+				; Use Repeat count, transition state bits from lParam to filter keys
+				
 				static last_down := 0	; used to filter key repeats
 				Critical
 				
-				keycode := new _Struct(WinStructs.KBDLLHOOKSTRUCT,wParam+0)
-				keycode := keycode.vkCode
+				if (this<0){
+					Return DllCall("CallNextHookEx", "Uint", Object(A_EventInfo)._hHookKeybd, "int", this, "Uint", wParam, "Uint", lParam)
+				}
+				this:=Object(A_EventInfo)
+				
+				keycode := NumGet(lParam+0,0,"Uint")
 				
 				; Find the key code and whether key went up/down
-				if (nCode = 0x100) || (nCode = 0x101) {
+				if (wParam = 0x100) || (wParam = 0x101) {
 					; WM_KEYDOWN || WM_KEYUP message received
 					; Normal keys / Release of ALT
-					if (nCode = 260){
+					if (wParam = 260){
 						; L/R ALT released
 						event := 0
 					} else {
 						; Down event message is 0x100, up is 0x100
-						event := abs(nCode - 0x101)
+						event := abs(wParam - 0x101)
 					}
-				} else if (nCode = 260){
+				} else if (wParam = 260){
 					; Alt keys pressed
 					event := 1
 				}
@@ -428,12 +410,13 @@ class _radical {
 				modifier := 0
 				if (keycode == 27){
 					; Quit Bind Mode on Esc
-					this._BindMode := 0
+					this._BindModeState := 0
 				} else {
 					; Determine if key is modifier or normal key
 					if ( (keycode >= 160 && keycode <= 165) || (keycode >= 91 && keycode <= 93) ) {
 						modifier := 1
 					} else {
+						/*
 						if (this._KeyCount){
 							; do not allow, >1 non-modifier keys
 							OutputDebug, % "Blocked - too many non-modifiers: " this._KeyCount
@@ -448,6 +431,7 @@ class _radical {
 								this._KeyCount--
 							}
 						}
+						*/
 					}
 				}
 
@@ -462,15 +446,15 @@ class _radical {
 					this._SelectedInput.push(keycode)
 				} else {
 					; Key went up
-					this._BindMode := 0
+					this._BindModeState := 0
 				}
-
-				;Return this._CallNextHookEx(nCode, wParam, lParam) ; allow key through
+				
+				this._ProcessInput({Type: "k", code : keycode, event: event, modifier: modifier})
 				return 1	; block key
 			}
 			
 			; Process Mouse messages from Hooks
-			_ProcessMHook(nCode, wParam, lParam){
+			_ProcessMHook(wParam, lParam){
 				/*
 				typedef struct tagMSLLHOOKSTRUCT {
 				  POINT     pt;
@@ -483,16 +467,15 @@ class _radical {
 				; MSLLHOOKSTRUCT structure: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644970(v=vs.85).aspx
 				static WM_LBUTTONDOWN := 0x0201, WM_LBUTTONUP := 0x0202 , WM_RBUTTONDOWN := 0x0204, WM_RBUTTONUP := 0x0205, WM_MBUTTONDOWN := 0x0207, WM_MBUTTONUP := 0x0208, WM_MOUSEHWHEEL := 0x20E, WM_MOUSEWHEEL := 0x020A, WM_XBUTTONDOWN := 0x020B, WM_XBUTTONUP := 0x020C
 				Critical
-				
-				out := "Mouse: " nCode " "
-				if (nCode = 0x200){
-					; Mouse Movement - pass through
-					Return this._CallNextHookEx(nCode, wParam, lParam)
+				if (this<0 || wParam = 0x200){
+					Return DllCall("CallNextHookEx", "Uint", Object(A_EventInfo)._hHookMouse, "int", this, "Uint", wParam, "Uint", lParam)
 				}
+				this:=Object(A_EventInfo)
+				out := "Mouse: " wParam " "
 				
 				found := 0
 				for key, value in this._MouseLookup {
-					if (key = nCode){
+					if (key = wParam){
 						found := 1
 						out .= value.name ", event: " value.event
 						break
@@ -501,18 +484,12 @@ class _radical {
 				
 				if (!found){
 					; Find HiWord of mouseData from Struct
-					; HotkeyIt - help! See mouseData at https://msdn.microsoft.com/en-us/library/windows/desktop/ms644970(v=vs.85).aspx
-					;lp := new _Struct(WinStructs.MSLLHOOKSTRUCT,lParam)
-					;if (nCode = WM_MOUSEWHEEL || nCode = WM_MOUSEHWHEEL){
-					;	mouseData := new _Struct("Short sht",lp.mouseData_high[""]).sht
-					;} else {
-					;	mouseData := lp.mouseData_high
-					;}
-					mouseData := 1 ; bodge for now
+					mouseData := NumGet(lParam+0, 10, "Short")
 					
-					if (nCode = WM_MOUSEHWHEEL || nCode = WM_MOUSEWHEEL){
+					if (wParam = WM_MOUSEHWHEEL || wParam = WM_MOUSEWHEEL){
 						; Mouse Wheel - mouseData indicate direction (up/down)
-						if (nCode = WM_MOUSEWHEEL){
+						event := 1	; wheel has no up event, only down
+						if (wParam = WM_MOUSEWHEEL){
 							out .= "Wheel"
 							if (mouseData > 1){
 								out .= "U"
@@ -520,11 +497,17 @@ class _radical {
 								out .= "D"
 							}
 						} else {
-							out .= "WheelL/R"
+							out .= "Wheel"
+							if (mouseData > 1){
+								out .= "R"
+							} else {
+								out .= "L"
+							}
 						}
-					} else if (nCode = WM_XBUTTONDOWN || nCode = WM_XBUTTONUP){
+						out .= ", event: " event
+					} else if (wParam = WM_XBUTTONDOWN || wParam = WM_XBUTTONUP){
 						; X Buttons - mouseData indicates Xbutton 1 or Xbutton2
-						if (nCode = WM_XBUTTONDOWN){
+						if (wParam = WM_XBUTTONDOWN){
 							event := 1
 						} else {
 							event := 0
@@ -539,6 +522,16 @@ class _radical {
 
 		}
 		
+		_ProcessInput(obj){
+			;{Type: "k", code : keycode, event: event, modifier: modifier}
+			if (obj.Type = "k"){
+				
+			} else if (obj.Type = "m"){
+				
+			} else if (obj.Type = "j"){
+				
+			}
+		}
 		
 		; Client command to add a hotkey
 		AddHotkey(name, callback, options, default){
