@@ -473,16 +473,12 @@ class _radical {
 				this:=Object(A_EventInfo)
 				out := "Mouse: " wParam " "
 				
-				found := 0
-				for key, value in this._MouseLookup {
-					if (key = wParam){
-						found := 1
-						out .= value.name ", event: " value.event
-						break
-					}
-				}
 				
-				if (!found){
+				if (IsObject(this._MouseLookup[wParam])){
+					; L / R / M  buttons
+					out .= this._MouseLookup[wParam].name ", event: " this._MouseLookup[wParam].event
+				} else {
+					; Wheel / XButtons
 					; Find HiWord of mouseData from Struct
 					mouseData := NumGet(lParam+0, 10, "Short")
 					
@@ -517,7 +513,7 @@ class _radical {
 				}
 				
 				OutputDebug % out
-				
+				return 1
 			}
 
 		}
