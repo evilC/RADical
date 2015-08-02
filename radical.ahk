@@ -270,6 +270,7 @@ class _radical {
 				fn := this.OptionSelected.Bind(this)
 				GuiControl % "+g", % this._hwnd, % fn
 				
+				; Lookup table to accelerate finding which mouse button was pressed
 				this._MouseLookup := {}
 				this._MouseLookup[0x201] := { name: "LButton", event: 1 }
 				this._MouseLookup[0x202] := { name: "LButton", event: 0 }
@@ -301,7 +302,8 @@ class _radical {
 
 				this._BindModeState := 1
 				this._SelectedInput := []
-				this._KeyCount := 0
+				this._LastKeyCode := 0
+				;this._KeyCount := 0
 				
 				Gui, new, hwndhPrompt -Border +AlwaysOnTop
 				Gui, % hPrompt ":Add", Text, w300 h100 Center, BIND MODE`n`nPress the desired key combination.`n`nBinding ends when you release a key.`nPress Esc to exit.
@@ -322,11 +324,12 @@ class _radical {
 				out := ""
 				Loop % this._SelectedInput.length(){
 					if (A_Index > 1){
-						out .= ","
+						out .= ", "
 					}
-					out .= this._GetKeyName(this._SelectedInput[A_Index])
+					;out .= this._GetKeyName(this._SelectedInput[A_Index])
+					out .= this._SelectedInput[A_Index].name
 				}
-				MsgBox % "You hit keys: " out
+				MsgBox % "You hit: " out
 			}
 			
 			_SetWindowsHookEx(idHook, pfn){
@@ -353,7 +356,6 @@ class _radical {
 				; ToDo:
 				; Use Repeat count, transition state bits from lParam to filter keys
 				
-				static last_down := 0	; used to filter key repeats
 				Critical
 				
 				if (this<0){
@@ -381,75 +383,23 @@ class _radical {
 				
 				; We now know the keycode and the event - filter out repeat down events
 				if (event){
-					if (last_down = keycode){
+					if (this._LastKeyCode = keycode){
 						return 1
 					}
-					last_down := keycode
+					this._LastKeyCode := keycode
 				}
 
-				/*
-				; SetWindowsHookEx repeats down events - filter those out
-				if (event){
-					dupe := 0
-					Loop % this._SelectedInput.length() {
-						;OutputDebug % "checking " this._SelectedInput[A_Index]
-						if (this._SelectedInput[A_Index] = keycode){
-							dupe := 1
-							;OutputDebug % "DUPE"
-							break
-						}
-					}
-					if (dupe){
-						; Exit and block key
-						return 1
-					}
-				}
-				*/
-				
 			
 				modifier := 0
-				if (keycode == 27){
-					; Quit Bind Mode on Esc
-					this._BindModeState := 0
-				} else {
-					; Determine if key is modifier or normal key
-					if ( (keycode >= 160 && keycode <= 165) || (keycode >= 91 && keycode <= 93) ) {
-						modifier := 1
-					} else {
-						/*
-						if (this._KeyCount){
-							; do not allow, >1 non-modifier keys
-							OutputDebug, % "Blocked - too many non-modifiers: " this._KeyCount
-							
-							if (event){
-								; warning beep on key down
-								SoundBeep
-								; abort and block key - do not process up or down event
-								return 1
-							} else {
-								; surplus key released
-								this._KeyCount--
-							}
-						}
-						*/
-					}
+				; Determine if key is modifier or normal key
+				if ( (keycode >= 160 && keycode <= 165) || (keycode >= 91 && keycode <= 93) ) {
+					modifier := 1
 				}
 
-				OutputDebug, % "Key Code: " keycode ", event: " event ", name: " GetKeyName(Format("vk{:x}", keycode)) ", modifier: " modifier
 
-				; We now have all the info we need, process the event
-				if (event){
-					; Key went down
-					if (!modifier){
-						this._KeyCount++
-					}
-					this._SelectedInput.push(keycode)
-				} else {
-					; Key went up
-					this._BindModeState := 0
-				}
+				;OutputDebug, % "Key Code: " keycode ", event: " event ", name: " GetKeyName(Format("vk{:x}", keycode)) ", modifier: " modifier
 				
-				this._ProcessInput({Type: "k", code : keycode, event: event, modifier: modifier})
+				this._ProcessInput({Type: "k", name: this._GetKeyName(keycode) , code : keycode, event: event, modifier: modifier})
 				return 1	; block key
 			}
 			
@@ -473,10 +423,13 @@ class _radical {
 				this:=Object(A_EventInfo)
 				out := "Mouse: " wParam " "
 				
+				keyname := ""
+				event := 0
 				
 				if (IsObject(this._MouseLookup[wParam])){
 					; L / R / M  buttons
-					out .= this._MouseLookup[wParam].name ", event: " this._MouseLookup[wParam].event
+					keyname := this._MouseLookup[wParam].name
+					event := 1
 				} else {
 					; Wheel / XButtons
 					; Find HiWord of mouseData from Struct
@@ -486,21 +439,20 @@ class _radical {
 						; Mouse Wheel - mouseData indicate direction (up/down)
 						event := 1	; wheel has no up event, only down
 						if (wParam = WM_MOUSEWHEEL){
-							out .= "Wheel"
+							keyname .= "Wheel"
 							if (mouseData > 1){
-								out .= "U"
+								keyname .= "U"
 							} else {
-								out .= "D"
+								keyname .= "D"
 							}
 						} else {
-							out .= "Wheel"
+							keyname .= "Wheel"
 							if (mouseData > 1){
-								out .= "R"
+								keyname .= "R"
 							} else {
-								out .= "L"
+								keyname .= "L"
 							}
 						}
-						out .= ", event: " event
 					} else if (wParam = WM_XBUTTONDOWN || wParam = WM_XBUTTONUP){
 						; X Buttons - mouseData indicates Xbutton 1 or Xbutton2
 						if (wParam = WM_XBUTTONDOWN){
@@ -508,25 +460,48 @@ class _radical {
 						} else {
 							event := 0
 						}
-						out .= "XButton" mouseData ", event: " event
+						keyname := "XButton" mouseData
 					}
 				}
 				
-				OutputDebug % out
+				;OutputDebug % "Mouse: " keyname ", event: " event
+				this._ProcessInput({Type: "m", name: keyname, event: event})
 				return 1
 			}
 
-		}
-		
-		_ProcessInput(obj){
-			;{Type: "k", code : keycode, event: event, modifier: modifier}
-			if (obj.Type = "k"){
-				
-			} else if (obj.Type = "m"){
-				
-			} else if (obj.Type = "j"){
-				
+			; All input (keyboard, mouse, joystick) should flow through here when in Bind Mode
+			_ProcessInput(obj){
+				;{Type: "k", name: keyname, code : keycode, event: event, modifier: modifier}
+				;{Type: "m", name: keyname, event: event}
+				modifier := 0
+				out := "PROCESSINPUT: "
+				if (obj.Type = "k"){
+					out .= "key = " obj.name ", code: " obj.keycode
+					if (obj.code == 27){
+						;Escape
+						this._BindModeState := 0
+						return
+					}
+					modifier := obj.modifier
+				} else if (obj.Type = "m"){
+					out .= "mouse = " obj.name
+				} else if (obj.Type = "j"){
+					
+				}
+				OutputDebug % out
+				if (obj.event = 0){
+					; key / button up
+					this._BindModeState := 0
+				} else {
+					; key / button down
+					this._SelectedInput.push(obj)
+					; End if not modifier
+					if (!modifier){
+						this._BindModeState := 0
+					}
+				}
 			}
+
 		}
 		
 		; Client command to add a hotkey
