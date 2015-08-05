@@ -104,7 +104,8 @@ class _radical {
 		this._client := client
 		
 		this._hwnds := {}
-		this._GuiSize := {w: 300, h: 150}	; Default size
+		this._GuiSize := {w: 300, h: 175}	; Default size
+		this._Profiles := []
 		
 		this._Hotkeys := {}					; basic info about hotkeys - bindings etc.
 		this._PersistentControls := {}		; Array of profile-specific persistent controls
@@ -148,11 +149,33 @@ class _radical {
 		}
 		
 		; Add non-client GUI elements
+		
+		; Profile selector
+		; Get list of profiles
 		this.Tabs.Profiles.Gui("Add", "Text", "xm ym", "Current Profile: ")
-		this._ProfileSelect := this.Tabs.Profiles.Gui("Add", "DDL", "xp+100 yp-3", "Default|Blah")
+		;this._ProfileSelect := this.Tabs.Profiles.Gui("Add", "DDL", "xp+80 yp-3 w150", "Default|" profile_list)
+		this._ProfileSelect := this.Tabs.Profiles.Gui("Add", "DDL", "xp+80 yp-3 w150")
+		this._BuildProfileDDL()
+		
+		this._ProfileAddButton := this.Tabs.Profiles.Gui("Add", "Button", "xm yp+25 center w50", "Add")
+		fn := this._AddProfile.Bind(this)
+		GuiControl % "+g", % this._ProfileAddButton._hwnd, % fn
+		
+		this._ProfileCopyButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+60 yp center w50", "Copy")
+		fn := this._CopyProfile.Bind(this)
+		GuiControl % "+g", % this._ProfileCopyButton._hwnd, % fn
+		
+		this._ProfileRenameButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+60 yp center w50", "Rename")
+		fn := this._RenameProfile.Bind(this)
+		GuiControl % "+g", % this._ProfileRenameButton._hwnd, % fn
+		
+		this._ProfileDeleteButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+60 yp center w50", "Delete")
+		fn := this._DeleteProfile.Bind(this)
+		GuiControl % "+g", % this._ProfileDeleteButton._hwnd, % fn
+		
 		this._ProfileSelect._ForceSection := "!Settings"
 		fn := this._ProfileChanged.Bind(this)
-		this._ProfileSelect.MakePersistent("Profile", "Default", fn)
+		this._ProfileSelect.MakePersistent("CurrentProfile", "Default", fn)
 		
 		; Load non-client GUI elements values
 		this._ProfileSelect._LoadValue()
@@ -187,6 +210,87 @@ class _radical {
 		
 	}
 	
+	_BuildProfileDDL(){
+		this._Profiles := ["Default"]
+		profile_list := this.IniRead("!Settings", "ProfileList", "")
+		profile_arr := StrSplit(profile_list, "|")
+		Loop % profile_arr.length() {
+			this._Profiles.push(profile_arr[A_Index])
+		}
+		GuiControl, , % this._ProfileSelect._hwnd, % "|Default|" profile_list
+		GuiControl, choose,  % this._ProfileSelect._hwnd, % this.CurrentProfile
+		this._ProfileChanged()
+	}
+	
+	_AddProfile(){
+		InputBox, var, " " , Enter new profile name ,,200 ,130,,,,,
+		if (ErrorLevel = 0){
+			if (var = ""){
+				return
+			}
+			if (this._ProfileCheckDupe(var)){
+				return
+			}
+			;MsgBox % var
+			this._Profiles.push(var)
+			new_list := ""
+			Loop % this._Profiles.length() {
+				if (A_Index = 1){
+					; do not list default
+					continue
+				}
+				if (A_Index != 2){
+					new_list .= "|"
+				}
+				new_list .= this._Profiles[A_Index]
+			}
+			this.IniWrite(new_list, "!Settings", "ProfileList", "")
+			this.CurrentProfile := var
+			this.IniWrite(var, "!Settings", "CurrentProfile", "Default")
+			this._BuildProfileDDL()
+		}
+	}
+	
+	_DeleteProfile(){
+		if (this.CurrentProfile != "Default"){
+			new_list := ""
+			profiles_added := 0
+			Loop % this._Profiles.length() {
+				if (A_Index = 1 || this._Profiles[A_Index] = this.CurrentProfile){
+					; do not list default or deleted profile
+					continue
+				}
+				if (profiles_added > 0){
+					new_list .= "|"
+				}
+				new_list .= this._Profiles[A_Index]
+				profiles_added++
+			}
+			IniDelete, % this._ScriptName, % this.CurrentProfile
+			this.IniWrite(new_list, "!Settings", "ProfileList", "")
+			this.CurrentProfile := "Default"
+			this.IniWrite("Default", "!Settings", "CurrentProfile", "Default")
+			this._BuildProfileDDL()
+		}
+	}
+	
+	_CopyProfile(){
+		
+	}
+	
+	_RenameProfile(){
+		
+	}
+	
+	_ProfileCheckDupe(profile){
+		Loop % this._Profiles.length() {
+			if (this._Profiles[A_Index] = profile){
+				return 1
+			}
+		}
+		return 0
+	}
+	
 	; --------- INI Reading / Writing -----------
 	IniRead(Section, key, Default){
 		;IniRead, val, % this._ScriptName, % Section, % this.Name, %A_Space%
@@ -216,6 +320,7 @@ class _radical {
 			Gui, New, hwndhGui
 			this._hwnd := hGui
 			Gui,% this._hwnd ":+Owner"
+			Gui,% this._hwnd ":+OwnDialogs"
 			;Gui, % this._hwnd ":Color", red
 			Gui, % this._hwnd ":+parent" hwndParent " -Border"
 			Gui, % this._hwnd ":Show", % "x-5 y-5 w" this._root._GuiSize.w - 40 " h" this._root._GuiSize.h - 70
