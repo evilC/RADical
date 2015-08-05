@@ -69,11 +69,13 @@ class MyClient extends RADical {
 	}
 	
 	; The user-defined hotkey changed state
-	SendMyStuff(value){
+	;SendMyStuff(value){
+	SendMyStuff(){
+		SoundBeep
 		if (value){
 			; key pressed
 			; Send contents of MyEdit box
-			Send % this.MyEdit.value
+			;Send % this.MyEdit.value
 		} else {
 			; key released
 		}
@@ -103,6 +105,8 @@ class _radical {
 		
 		this._hwnds := {}
 		this._GuiSize := {w: 300, h: 150}	; Default size
+		
+		this._Hotkeys := {}
 		
 		SplitPath, % A_ScriptName,,,,ScriptName
 		this._ScriptName := ScriptName ".ini"
@@ -260,15 +264,18 @@ class _radical {
 		
 		; ----------------------------- Hotkey GuiControl class ---------------------------
 		class _CHotkeyControl {
-			static MenuText := "||Wild|PassThrough|Remove"
-			__New(parent, name, callback, options := "", default := ""){
-				this.value := ""
-				
-				this._parent := parent
-				Gui, % parent._hwnd ":Add", DDL, % "hwndhDDL AltSubmit " options, % "(UnBound)" this.MenuText
-				this._hwnd := hDDl
-				fn := this.OptionSelected.Bind(this)
-				GuiControl % "+g", % this._hwnd, % fn
+			static _MenuText := "Select new Binding|Toggle Wild (*) |Toggle PassThrough (~)|Remove Binding"
+			
+			__New(hwnd, name, callback, options := "", default := ""){
+				this._Value := default			; AHK Syntax of current binding, eg ~*^!a
+				this.HotkeyString := ""		; AHK Syntax of current binding, eg ^!a WITHOUT modes such as * or ~
+				this.ModeString := ""
+				this.HumanReadable := ""	; Human Readable version of current binding, eg CTRL + SHIFT + A
+				this.Wild := 0
+				this.PassThrough := 0
+				this._ParentHwnd := hwnd
+				this.Name := name
+				this._callback := callback
 				
 				; Lookup table to accelerate finding which mouse button was pressed
 				this._MouseLookup := {}
@@ -278,32 +285,89 @@ class _radical {
 				this._MouseLookup[0x205] := { name: "RButton", event: 0 }
 				this._MouseLookup[0x207] := { name: "MButton", event: 1 }
 				this._MouseLookup[0x208] := { name: "MButton", event: 0 }
+
+				; Add the GuiControl
+				Gui, % this._ParentHwnd ":Add", ComboBox, % "hwndhwnd AltSubmit " options, % this._MenuText
+				this._hwnd := hwnd
+				
+				; Find hwnd of EditBox that is a child of the ComboBox
+				this._hEdit := DllCall("GetWindow","PTR",this._hwnd,"Uint",5) ;GW_CHILD = 5
+				
+				; Bind an OnChange event
+				fn := this.OptionSelected.Bind(this)
+				GuiControl % "+g", % this._hwnd, % fn
+						
+				this.Value := this._Value	; trigger __Set meta-func to configure control
 			}
 			
+			; value was set
+			__Set(aParam, aValue){
+				if (aParam = "value"){
+					this._ValueSet(aValue)
+					return this._Value
+				}
+			}
+			
+			; Read of value
+			__Get(aParam){
+				if (aParam = "value"){
+					return this._Value
+				}
+			}
+
+			; Change hotkey AND modes to new values
+			_ValueSet(hotkey_string){
+				arr := this._SplitModes(hotkey_string)
+				this._SetModes(arr[1])
+				this.HotkeyString := arr[2]
+				this._HotkeySet()
+			}
+			
+			; Change hotkey only and LEAVE modes
+			_HotkeySet(){
+				this.HumanReadable := this._BuildHumanReadable(this.HotkeyString)
+				this._value := this.ModeString this.HotkeyString
+				this._UpdateGuiControl()
+				; Fire the OnChange callback
+				this._callback.(this)
+
+			}
+			
+			; ============== HOTKEY MANAGEMENT ============
+			; An option was selected in the drop-down list
 			OptionSelected(){
 				GuiControlGet, option,, % this._hwnd
+				GuiControl, Choose, % this._hwnd, 0
 				if (option = 1){
 					; Bind Mode
 					;ToolTip Bind MODE
 					this._BindMode()
 					
 				} else if (option = 2){
-					ToolTip Wild Option Changed
+					;ToolTip Wild Option Changed
+					this.Wild := !this.Wild
+					this.ModeString := this._BuildModes()
+					this._HotkeySet()
 				} else if (option = 3){
-					ToolTip PassThrough Option Changed
+					;ToolTip PassThrough Option Changed
+					this.PassThrough := !this.PassThrough
+					this.ModeString := this._BuildModes()
+					this._HotkeySet()
 				} else if (option = 4){
-					ToolTip Remove Binding
+					;ToolTip Remove Binding
+					this.Value := ""
 				}
-				GuiControl, Choose, % this._hwnd, 1
 			}
 			
+			; Bind mode was enabled
 			_BindMode(){
 				static WH_KEYBOARD_LL := 13, WH_MOUSE_LL := 14
+				static modifier_symbols := {91: "#", 92: "#", 160: "+", 161: "+", 162: "^", 163: "^", 164: "!", 165: "!"}
+				;static modifier_lr_variants := {91: "<", 92: ">", 160: "<", 161: ">", 162: "<", 163: ">", 164: "<", 165: ">"}
 
 				this._BindModeState := 1
 				this._SelectedInput := []
-				this._LastKeyCode := 0
-				;this._KeyCount := 0
+				this._ModifiersUsed := []
 				
 				Gui, new, hwndhPrompt -Border +AlwaysOnTop
 				Gui, % hPrompt ":Add", Text, w300 h100 Center, BIND MODE`n`nPress the desired key combination.`n`nBinding ends when you release a key.`nPress Esc to exit.
@@ -322,30 +386,137 @@ class _radical {
 				Gui,  % hPrompt ":Destroy"
 				
 				out := ""
-				Loop % this._SelectedInput.length(){
-					if (A_Index > 1){
-						out .= ", "
-					}
-					;out .= this._GetKeyName(this._SelectedInput[A_Index])
-					out .= this._SelectedInput[A_Index].name
+				end_modifier := 0
+				
+				if (this._SelectedInput.length() < 1){
+					return
 				}
-				MsgBox % "You hit: " out
+
+				; Prefix with current modes
+				hotkey_string := ""
+				if (this.Wild){
+					hotkey_string .= "*"
+				}
+				if (this.PassThrough){
+					hotkey_string .= "~"
+				}
+
+				; build hotkey string
+				l := this._SelectedInput.length()
+				Loop % l {
+					if (this._SelectedInput[A_Index].Type = "k" && this._SelectedInput[A_Index].modifier && A_Index != l){
+						hotkey_string .= modifier_symbols[this._SelectedInput[A_Index].vk]
+					} else {
+						hotkey_string .= this._SelectedInput[A_Index].name
+					}
+				}
+				
+				; trigger __Set meta-func to configure control
+				this.Value := hotkey_string
 			}
 			
+			; Builds mode string from this.Wild and this.Passthrough
+			_BuildModes(){
+				str := ""
+				if (this.Wild){
+					str .= "*"
+				}
+				if (this.PassThrough){
+					str .= "~"
+				}
+				return str
+			}
+			; Converts an AHK hotkey string (eg "^+a"), plus the state of WILD and PASSTHROUGH properties to Human Readable format (eg "(WP) CTRL+SHIFT+A")
+			_BuildHumanReadable(hotkey_string){
+				static modifier_names := {"+": "Shift", "^": "Ctrl", "!": "Alt", "#": "Win"}
+				
+				dbg := "TRANSLATING: " hotkey_string " : "
+				
+				if (hotkey_string = ""){
+					return "(Select to Bind)"
+				}
+				str := ""
+				mode_str := ""
+				idx := 1
+				; Add mode indicators
+				if (this.Wild){
+					mode_str .= "W"
+				}
+				if (this.PassThrough){
+					mode_str .= "P"
+				}
+				
+				if (mode_str){
+					str := "(" mode_str ") " str
+				}
+				
+				idx := 1
+				; Parse modifiers
+				Loop % StrLen(hotkey_string) {
+					chr := SubStr(hotkey_string, A_Index, 1)
+					if (ObjHasKey(modifier_names, chr)){
+						str .= modifier_names[chr] " + "
+						idx++
+					} else {
+						break
+					}
+				}
+				str .= SubStr(hotkey_string, idx)
+				StringUpper, str, str
+				
+				;OutputDebug % "BHR: " dbg hotkey_string
+				return str
+			}
+
+			; Splits a hotkey string (eg *~^a" into an array with 1st item modes (eg "*~") and 2nd item the rest of the hotkey (eg "^a")
+			_SplitModes(hotkey_string){
+				mode_str := ""
+				idx := 0
+				Loop % StrLen(hotkey_string) {
+					chr := SubStr(hotkey_string, A_Index, 1)
+					if (chr = "*" || chr = "~"){
+						idx++
+					} else {
+						break
+					}
+				}
+				if (idx){
+					mode_str := SubStr(hotkey_string, 1, idx)
+				}
+				return [mode_str, SubStr(hotkey_string, idx + 1)]
+			}
+			
+			; Sets modes from a mode string (eg "*~")
+			_SetModes(hotkey_string){
+				this.Wild := 0
+				this.PassThrough := 0
+				this.ModeString := ""
+				Loop % StrLen(hotkey_string) {
+					chr := SubStr(hotkey_string, A_Index, 1)
+					if (chr = "*"){
+						this.Wild := 1
+					} else if (chr = "~"){
+						this.PassThrough := 1
+					} else {
+						break
+					}
+					this.ModeString .= chr
+				}
+			}
+			
+			; The binding changed - update the GuiControl
+			_UpdateGuiControl(){
+				static EM_SETCUEBANNER:=0x1501
+				DllCall("User32.dll\SendMessageW", "Ptr", this._hEdit, "Uint", EM_SETCUEBANNER, "Ptr", True, "WStr", modes this.HumanReadable)
+			}
+			
+			; ============= HOOK HANDLING =================
 			_SetWindowsHookEx(idHook, pfn){
 				Return DllCall("SetWindowsHookEx", "Ptr", idHook, "Ptr", pfn, "Uint", DllCall("GetModuleHandle", "Uint", 0, "Ptr"), "Uint", 0, "Ptr")
 			}
 			
 			_UnhookWindowsHookEx(idHook){
 				Return DllCall("UnhookWindowsHookEx", "Ptr", idHook)
-			}
-			
-			_CallNextHookEx(nCode, wParam, lParam, hHook := 0){
-				Return DllCall("CallNextHookEx", "Uint", hHook, "int", nCode, "Uint", wParam, "Uint", lParam)
-			}
-			
-			_GetKeyName(keycode){
-				return GetKeyName(Format("vk{:x}", keycode))
 			}
 			
 			; Process Keyboard messages from Hooks
@@ -356,6 +527,9 @@ class _radical {
 				; ToDo:
 				; Use Repeat count, transition state bits from lParam to filter keys
 				
+				static WM_KEYDOWN := 0x100, WM_KEYUP := 0x101, WM_SYSKEYDOWN := 0x104
+				static last_vk, last_sc
+				
 				Critical
 				
 				if (this<0){
@@ -363,43 +537,30 @@ class _radical {
 				}
 				this:=Object(A_EventInfo)
 				
-				keycode := NumGet(lParam+0,0,"Uint")
+				vk := NumGet(lParam+0, "UInt")
+				Extended := NumGet(lParam+0, 8, "UInt") & 1
+				sc := (Extended<<8)|NumGet(lParam+0, 4, "UInt")
+				sc := sc = 0x136 ? 0x36 : sc
+				key:=GetKeyName(Format("vk{1:x}sc{2:x}", vk,sc))
 				
-				; Find the key code and whether key went up/down
-				if (wParam = 0x100) || (wParam = 0x101) {
-					; WM_KEYDOWN || WM_KEYUP message received
-					; Normal keys / Release of ALT
-					if (wParam = 260){
-						; L/R ALT released
-						event := 0
-					} else {
-						; Down event message is 0x100, up is 0x100
-						event := abs(wParam - 0x101)
-					}
-				} else if (wParam = 260){
-					; Alt keys pressed
-					event := 1
-				}
+				event := wParam = WM_SYSKEYDOWN || wParam = WM_KEYDOWN
 				
-				; We now know the keycode and the event - filter out repeat down events
-				if (event){
-					if (this._LastKeyCode = keycode){
+				OutputDebug % "Processing Key Hook... " key " | event: " event " | WP: " wParam
+				
+				; Find out if key went up or down, plus filter repeated down events
+				if (event) {
+					if (last_vk = vk && last_sc = sc){
 						return 1
 					}
-					this._LastKeyCode := keycode
+					last_vk := vk
+					last_sc := sc
 				}
 
-			
-				modifier := 0
-				; Determine if key is modifier or normal key
-				if ( (keycode >= 160 && keycode <= 165) || (keycode >= 91 && keycode <= 93) ) {
-					modifier := 1
-				}
+				modifier := (vk >= 160 && vk <= 165) || (vk >= 91 && vk <= 93)
 
-
-				;OutputDebug, % "Key Code: " keycode ", event: " event ", name: " GetKeyName(Format("vk{:x}", keycode)) ", modifier: " modifier
+				;OutputDebug, % "Key VK: " vk ", event: " event ", name: " GetKeyName(Format("vk{:x}", vk)) ", modifier: " modifier
 				
-				this._ProcessInput({Type: "k", name: this._GetKeyName(keycode) , code : keycode, event: event, modifier: modifier})
+				this._ProcessInput({Type: "k", name: key , vk : vk, event: event, modifier: modifier})
 				return 1	; block key
 			}
 			
@@ -473,22 +634,42 @@ class _radical {
 			_ProcessInput(obj){
 				;{Type: "k", name: keyname, code : keycode, event: event, modifier: modifier}
 				;{Type: "m", name: keyname, event: event}
+				; Do not process key if bind mode has been exited.
+				; Prevents users from being able to hit multiple keys together and exceeding valid length
+				static modifier_variants := {91: 92, 92: 91, 160: 161, 161: 160, 162: 163, 163: 162, 164: 165, 165: 164}
+				
+				if (!this._BindModeState){
+					return
+				}
 				modifier := 0
 				out := "PROCESSINPUT: "
 				if (obj.Type = "k"){
-					out .= "key = " obj.name ", code: " obj.keycode
-					if (obj.code == 27){
+					out .= "key = " obj.name ", code: " obj.vk
+					if (obj.vk == 27){
 						;Escape
 						this._BindModeState := 0
 						return
 					}
 					modifier := obj.modifier
+					; RALT sends CTRL, ALT continuously when held - ignore down events for already held modifiers
+					Loop % this._ModifiersUsed.length(){
+						if (obj.event = 1 && obj.vk = this._ModifiersUsed[A_Index]){
+							;OutputDebug % "IGNORING : " obj.vk
+							return
+						}
+						;OutputDebug % "ALLOWING : " obj.vk " - " this._ModifiersUsed.length()
+					}
+					this._ModifiersUsed.push(obj.vk)
+					; Push l/r variant to used list
+					this._ModifiersUsed.push(modifier_variants[obj.vk])
 				} else if (obj.Type = "m"){
 					out .= "mouse = " obj.name
 				} else if (obj.Type = "j"){
 					
 				}
-				OutputDebug % out
+				
+				; Detect if Bind Mode should end
+				;OutputDebug % out
 				if (obj.event = 0){
 					; key / button up
 					this._BindModeState := 0
@@ -501,16 +682,31 @@ class _radical {
 					}
 				}
 			}
-
-		}
-		
+		}		
 		; Client command to add a hotkey
 		AddHotkey(name, callback, options, default){
-			hk := new this._CHotkeyControl(this, name, callback, options, default)
+			this._Hotkeys[name] := {}
+			fn := this.HotkeyChanged.Bind(this)
+			this._Hotkeys[name].callback := callback
+			hk := new this._CHotkeyControl(this._hwnd, name, fn, options, default)
 			return hk
 		}
 
-		
+		HotkeyChanged(hkobj){
+			;MsgBox % "Hotkey :" hkobj.Name "`nNew Human Readable: " hkobj.HumanReadable "`nNew Hotkey String: " hkobj.Value
+			ToolTip % hkobj.Value
+			if (ObjHasKey(this._Hotkeys[hkobj.name], "binding")){
+				; hotkey already bound, un-bind first
+				hotkey, % this._Hotkeys[hkobj.name].binding, Off
+			}
+			; Bind new hotkey
+			this._Hotkeys[hkobj.name].binding := hkobj.Value
+			fn := this._Hotkeys[hkobj.name].callback
+			hotkey, % hkobj.Value, % fn
+			hotkey, % hkobj.Value, On
+			OutputDebug % "BINDING: " hkobj._Value
+		}
+				
 		; --------- INI Reading / Writing -----------
 		IniRead(Section, key, Default){
 			;IniRead, val, % this._ScriptName, % Section, % this._PersistenceName, %A_Space%
