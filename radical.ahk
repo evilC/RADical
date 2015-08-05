@@ -591,13 +591,6 @@ class _radical {
 			OutputDebug % "BINDING: " hkobj._Value ", DEF: " hkobj._DefaultValue
 		}
 		
-		_DisableHotkey(){
-			
-		}
-		
-		_EnableHotkey(){
-			
-		}
 		; A bound hotkey changed state (ie was pressed or released)
 		_HotkeyChangedState(hkobj, event){
 			; Block duplicate down events for hotkeys
