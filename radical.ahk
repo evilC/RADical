@@ -42,7 +42,7 @@ class MyClient extends RADical {
 	Init(){
 		this._myname := "Client" ; debugging
 		; Add required tab(s)
-		this.RADical.Tabs(["Settings","Blank"])
+		this.RADical.Tabs(["Settings"])
 	}
 	
 	; Called after Initialization - Assemble your GUI, set up your hotkeys etc here
@@ -106,14 +106,12 @@ class _radical {
 		this._hwnds := {}
 		this._GuiSize := {w: 300, h: 150}	; Default size
 		
-		this._Hotkeys := {}
+		this._Hotkeys := {}					; basic info about hotkeys - bindings etc.
+		this._PersistentControls := {}		; Array of profile-specific persistent controls
 		this._StartingUp := 1
 		
 		SplitPath, % A_ScriptName,,,,ScriptName
 		this._ScriptName := ScriptName ".ini"
-		
-		; Bodge for now
-		this.CurrentProfile := "Default"
 	}
 	
 	; Create the main GUI
@@ -149,12 +147,64 @@ class _radical {
 			this.Tabs[this._TabIndex[A_Index]] := new this._CGui(this, hGuiArea)
 		}
 		
+		; Add non-client GUI elements
+		this.Tabs.Profiles.Gui("Add", "Text", "xm ym", "Current Profile: ")
+		this._ProfileSelect := this.Tabs.Profiles.Gui("Add", "DDL", "xp+100 yp-3", "Default|Blah")
+		this._ProfileSelect._ForceSection := "!Settings"
+		fn := this._ProfileChanged.Bind(this)
+		this._ProfileSelect.MakePersistent("Profile", "Default", fn)
+		
+		; Load non-client GUI elements values
+		this._ProfileSelect._LoadValue()
+		
+
+		;this._ProfileChanged()
 	}
 	
 	_StartupDone(){
+		this._ProfileChanged()
 		this._StartingUp := 0
 	}
 	
+	_ProfileChanged(){
+		OutputDebug % "ProfileChanged : Processing change to profile " this._ProfileSelect.value
+		this.CurrentProfile := this._ProfileSelect.value
+		;ToolTip % this._ProfileSelect.value
+		for name, hk in this._Hotkeys {
+			;hk.obj.value := this.IniRead(
+			;hk.obj.value := "F12"
+			val := this.IniRead(this.CurrentProfile, Name, hk.obj._DefaultValue)
+			;val := this.IniRead(this.CurrentProfile, Name, "")
+			OutputDebug % "ProfileChanged: Loading hotkey setting for " name ", value = " val
+			hk.obj.value := val
+		}
+
+		for name, obj in this._PersistentControls {
+			; Load new Control value for this profile
+			OutputDebug % "ProfileChanged: Loading persistent setting for " obj.name
+			obj._LoadValue()
+		}
+		
+	}
+	
+	; --------- INI Reading / Writing -----------
+	IniRead(Section, key, Default){
+		;IniRead, val, % this._ScriptName, % Section, % this.Name, %A_Space%
+		IniRead, val, % this._ScriptName, % Section, % key, % A_Space
+		if (val = ""){
+			val := Default
+		}
+		return val
+	}
+	
+	IniWrite(value, section, key, Default){
+		if (value = Default){
+			IniDelete, % this._ScriptName, % Section, % key
+		} else {
+			IniWrite, % value, % this._ScriptName, % Section, % key
+		}
+	}
+
 	; ----------------------------- GUI class ---------------------------
 	; Wraps Child GUIs into a class
 	class _CGui {
@@ -212,10 +262,11 @@ class _radical {
 			__New(parent, ctrltype, options := "", text := ""){
 				this._Parent := parent
 				this._CtrlType := ctrltype
-				this._PersistenceName := 0
+				this.Name := 0
 				this._glabel := 0
 				this._DefaultValue := ""
-				this._updating := 0		; Set to 1 when writing to GuiControl, to stop it writing to the settings file
+				this._updating := 0			; Set to 1 when writing to GuiControl, to stop it writing to the settings file
+				this._ForceSection := ""	; Used to store setting not by profile, but in the settings section
 				
 				Gui, % this._parent._hwnd ":Add", % ctrltype, % "hwndhwnd " options, % text
 				this._hwnd := hwnd
@@ -233,17 +284,26 @@ class _radical {
 			
 			__Set(aParam, aValue){
 				if (aParam = "value"){
-					return this._parent.GuiControl(,this, aValue)
+					if (this._CtrlType = "DDL" || this._CtrlType = "DropdownList" || this._CtrlType = "Combobox"){
+						return this._parent.GuiControl("Choose" ,this, aValue)
+					} else {
+						return this._parent.GuiControl(,this, aValue)
+					}
 				}
 			}
 		
 			_OnChange(){
 				; Update persistent settings
-				if (this._PersistenceName){
+				if (this.Name){
 					; Write settings to file
 					; ToDo: Make Asynchronous
 					if (!this._updating){
-						this._parent.IniWrite(this.value, this._parent._root.CurrentProfile, this._PersistenceName, this._DefaultValue)
+						if (this._ForceSection){
+							Section := this._ForceSection
+						} else {
+							Section := this._parent._root.CurrentProfile
+						}
+						this._parent._root.IniWrite(this.value, Section, this.Name, this._DefaultValue)
 					}
 					
 					; Call user glabel
@@ -257,14 +317,27 @@ class _radical {
 			; Makes a Gui Control persistent - value is saved in settings file
 			MakePersistent(Name, Default := "", glabel := 0){
 				; ToDo: Check for uniqueness of name
-				this._PersistenceName := Name
+				OutputDebug % "MakePersistent: Name = " name ", Default = " Default
+				this.Name := Name
 				this._glabel := glabel
 				if (Default != ""){
 					this._DefaultValue := Default
 				}
+				if (!this._ForceSection){
+					this._parent._root._PersistentControls[name] := this
+				}
+			}
+			
+			_LoadValue(){
 				this._updating := 1
-				val := this._parent.IniRead(this._parent._root.CurrentProfile, this._PersistenceName, this._DefaultValue)
-				this.value := val
+				if (this._ForceSection){
+					Section := this._ForceSection
+				} else {
+					Section := this._parent._root.CurrentProfile
+					;this._parent._root._PersistentControls[name] := this
+				}
+				this.value := this._parent._root.IniRead(Section, this.Name, this._DefaultValue)
+				OutputDebug % "Loading Value for " this.name ", profile: " Section ", value = " this.value
 				this._updating := 0
 			}
 			
@@ -272,29 +345,26 @@ class _radical {
 		
 		; Client command to add a hotkey
 		AddHotkey(name, callback, options, default){
-			this._Hotkeys[name] := {}
+			OutputDebug % "AddHotkey: Name = " name ", Default = " Default
+			this._root._Hotkeys[name] := {}
 			fn := this._HotkeyChangedBinding.Bind(this)
-			this._Hotkeys[name].callback := callback
-			value := this.IniRead(this._root.CurrentProfile, name, "")
-			if (value == ""){
-				value := Default
-			}
-			OutputDebug % "DEF: " value
-			hk := new this._CHotkeyControl(this._hwnd, name, fn, options, value)
+			this._root._Hotkeys[name].callback := callback
+			hk := new this._CHotkeyControl(this._hwnd, name, fn, options, "")
 			hk._DefaultValue := Default
+			this._root._Hotkeys[name].obj := hk
 			return hk
 		}
 
 		; A Hotkey changed binding
 		_HotkeyChangedBinding(hkobj){
 			;ToolTip % hkobj.Value
-			if (ObjHasKey(this._Hotkeys[hkobj.name], "binding") && this._Hotkeys[hkobj.name].binding){
+			if (ObjHasKey(this._root._Hotkeys[hkobj.name], "binding") && this._root._Hotkeys[hkobj.name].binding){
 				; hotkey already bound, un-bind first
-				hotkey, % this._Hotkeys[hkobj.name].binding, Off
-				hotkey, % this._Hotkeys[hkobj.name].binding " up", Off
+				hotkey, % this._root._Hotkeys[hkobj.name].binding, Off
+				hotkey, % this._root._Hotkeys[hkobj.name].binding " up", Off
 			}
 			; Bind new hotkey
-			this._Hotkeys[hkobj.name].binding := hkobj.Value
+			this._root._Hotkeys[hkobj.name].binding := hkobj.Value
 			
 			if (hkobj.Value){
 				; Bind Down Event
@@ -314,34 +384,14 @@ class _radical {
 			}
 
 			; Update INI File
-			this.IniWrite(hkobj.Value, this._root.CurrentProfile, hkobj.name, hkobj._DefaultValue)
-			OutputDebug % "BINDING: " hkobj._Value " - DEF: " hkobj._DefaultValue
+			this._root.IniWrite(hkobj.Value, this._root.CurrentProfile, hkobj.name, hkobj._DefaultValue)
+			OutputDebug % "BINDING: " hkobj._Value ", DEF: " hkobj._DefaultValue
 		}
 		
 		; A bound hotkey changed state (ie was pressed or released)
 		_HotkeyChangedState(hkobj, event){
-			this._Hotkeys[hkobj.name].callback.(event)
+			this._root._Hotkeys[hkobj.name].callback.(event)
 		}
-				
-		; --------- INI Reading / Writing -----------
-		IniRead(Section, key, Default){
-			;IniRead, val, % this._ScriptName, % Section, % this._PersistenceName, %A_Space%
-			IniRead, val, % this._root._ScriptName, % Section, % key, % A_Space
-			if (val = ""){
-				val := Default
-			}
-			return val
-		}
-		
-		IniWrite(value, section, key, Default){
-			if (value = Default){
-				IniDelete, % this._root._ScriptName, % Section, % key
-			} else {
-				OutputDebug, % "UPDATE - " this._parent._ScriptName
-				IniWrite, % value, % this._root._ScriptName, % Section, % key
-			}
-		}
-
 	}
 	
 	; -------------- Client routines ----------------
