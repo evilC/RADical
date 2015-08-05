@@ -69,15 +69,15 @@ class MyClient extends RADical {
 	}
 	
 	; The user-defined hotkey changed state
-	;SendMyStuff(value){
-	SendMyStuff(){
-		SoundBeep
-		if (value){
+	SendMyStuff(state){
+		if (state){
 			; key pressed
 			; Send contents of MyEdit box
 			;Send % this.MyEdit.value
+			SoundBeep, 1000, 200
 		} else {
 			; key released
+			SoundBeep, 500, 200
 		}
 	}
 }
@@ -683,28 +683,45 @@ class _radical {
 				}
 			}
 		}		
+		
 		; Client command to add a hotkey
 		AddHotkey(name, callback, options, default){
 			this._Hotkeys[name] := {}
-			fn := this.HotkeyChanged.Bind(this)
+			fn := this._HotkeyChangedBinding.Bind(this)
 			this._Hotkeys[name].callback := callback
 			hk := new this._CHotkeyControl(this._hwnd, name, fn, options, default)
 			return hk
 		}
 
-		HotkeyChanged(hkobj){
-			;MsgBox % "Hotkey :" hkobj.Name "`nNew Human Readable: " hkobj.HumanReadable "`nNew Hotkey String: " hkobj.Value
-			ToolTip % hkobj.Value
-			if (ObjHasKey(this._Hotkeys[hkobj.name], "binding")){
+		; A Hotkey changed binding
+		_HotkeyChangedBinding(hkobj){
+			;ToolTip % hkobj.Value
+			if (ObjHasKey(this._Hotkeys[hkobj.name], "binding") && this._Hotkeys[hkobj.name].binding){
 				; hotkey already bound, un-bind first
 				hotkey, % this._Hotkeys[hkobj.name].binding, Off
+				hotkey, % this._Hotkeys[hkobj.name].binding " up", Off
 			}
 			; Bind new hotkey
 			this._Hotkeys[hkobj.name].binding := hkobj.Value
-			fn := this._Hotkeys[hkobj.name].callback
-			hotkey, % hkobj.Value, % fn
-			hotkey, % hkobj.Value, On
+			
+			if (hkobj.Value){
+				; Bind Down Event
+				fn := this._HotkeyChangedState.bind(this, hkobj, 1)
+				hotkey, % hkobj.Value, % fn
+				hotkey, % hkobj.Value, On
+				
+				; Bind Up Event
+				fn := this._HotkeyChangedState.bind(this, hkobj, 0)
+				hotkey, % hkobj.Value " up", % fn
+				hotkey, % hkobj.Value " up", On
+			}
+			
 			OutputDebug % "BINDING: " hkobj._Value
+		}
+		
+		; A bound hotkey changed state (ie was pressed or released)
+		_HotkeyChangedState(hkobj, event){
+			this._Hotkeys[hkobj.name].callback.(event)
 		}
 				
 		; --------- INI Reading / Writing -----------
