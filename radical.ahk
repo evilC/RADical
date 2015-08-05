@@ -5,11 +5,12 @@ OutputDebug, DBGVIEWCLEAR
 RADical - A Rapid Application Development for AutoHotkey
 
 ToDo:
-* Hotkey fires up event when user releases key after bind
+
+* Suppress repeat of down events for hotkeys
 
 * Profiles system
-Save sets of persistent settings and allow switching.
-Allow Auto switching of profiles based upon active application
++ Streamline Add / Delete / Copy / Rename code
++ Allow Auto switching of profiles based upon active application
 
 * Callbacks for events
 eg Tab Changed, Profile Changed
@@ -73,10 +74,10 @@ class MyClient extends RADical {
 			; key pressed
 			; Send contents of MyEdit box
 			;Send % this.MyEdit.value
-			SoundBeep, 1000, 200
+			this.RADical.AsynchBeep(1000, 200)
 		} else {
 			; key released
-			SoundBeep, 500, 200
+			this.RADical.AsynchBeep(500, 200)
 		}
 	}
 }
@@ -112,7 +113,7 @@ class _radical {
 		this._StartingUp := 1
 		
 		SplitPath, % A_ScriptName,,,,ScriptName
-		this._ScriptName := ScriptName ".ini"
+		this._ININame := ScriptName ".ini"
 	}
 	
 	; Create the main GUI
@@ -150,7 +151,7 @@ class _radical {
 		
 		; Add non-client GUI elements
 		
-		; Profile selector
+		; ================================ Profiles ==========================================
 		; Get list of profiles
 		this.Tabs.Profiles.Gui("Add", "Text", "xm ym", "Current Profile: ")
 		;this._ProfileSelect := this.Tabs.Profiles.Gui("Add", "DDL", "xp+80 yp-3 w150", "Default|" profile_list)
@@ -194,10 +195,7 @@ class _radical {
 		this.CurrentProfile := this._ProfileSelect.value
 		;ToolTip % this._ProfileSelect.value
 		for name, hk in this._Hotkeys {
-			;hk.obj.value := this.IniRead(
-			;hk.obj.value := "F12"
 			val := this.IniRead(this.CurrentProfile, Name, hk.obj._DefaultValue)
-			;val := this.IniRead(this.CurrentProfile, Name, "")
 			OutputDebug % "ProfileChanged: Loading hotkey setting for " name ", value = " val
 			hk.obj.value := val
 		}
@@ -223,16 +221,15 @@ class _radical {
 	}
 	
 	_AddProfile(){
-		InputBox, var, " " , Enter new profile name ,,200 ,130,,,,,
+		InputBox, new_name, " " , Enter new profile name ,,200 ,130,,,,,
 		if (ErrorLevel = 0){
-			if (var = ""){
+			if (new_name = ""){
 				return
 			}
-			if (this._ProfileCheckDupe(var)){
+			if (!this._IsValidNewProfileName(new_name)){
 				return
 			}
-			;MsgBox % var
-			this._Profiles.push(var)
+			this._Profiles.push(new_name)
 			new_list := ""
 			Loop % this._Profiles.length() {
 				if (A_Index = 1){
@@ -245,14 +242,16 @@ class _radical {
 				new_list .= this._Profiles[A_Index]
 			}
 			this.IniWrite(new_list, "!Settings", "ProfileList", "")
-			this.CurrentProfile := var
-			this.IniWrite(var, "!Settings", "CurrentProfile", "Default")
+			this.CurrentProfile := new_name
+			this.IniWrite(new_name, "!Settings", "CurrentProfile", "Default")
 			this._BuildProfileDDL()
 		}
 	}
 	
 	_DeleteProfile(){
-		if (this.CurrentProfile != "Default"){
+		if (this.CurrentProfile = "Default"){
+			this.AsynchBeep(500, 200)
+		} else {
 			new_list := ""
 			profiles_added := 0
 			Loop % this._Profiles.length() {
@@ -266,7 +265,7 @@ class _radical {
 				new_list .= this._Profiles[A_Index]
 				profiles_added++
 			}
-			IniDelete, % this._ScriptName, % this.CurrentProfile
+			IniDelete, % this._ININame, % this.CurrentProfile
 			this.IniWrite(new_list, "!Settings", "ProfileList", "")
 			this.CurrentProfile := "Default"
 			this.IniWrite("Default", "!Settings", "CurrentProfile", "Default")
@@ -275,26 +274,90 @@ class _radical {
 	}
 	
 	_CopyProfile(){
-		
+		InputBox, new_name, " " , Enter new profile name ,,200 ,130,,,,,
+		if (ErrorLevel = 0){
+			if (!this._IsValidNewProfileName(new_name)){
+				this.AsynchBeep(500, 200)
+				return
+			}
+			this._Profiles.push(new_name)
+			
+			new_list := ""
+			Loop % this._Profiles.length() {
+				if (A_Index = 1){
+					; do not list default
+					continue
+				}
+				if (A_Index != 2){
+					new_list .= "|"
+				}
+				new_list .= this._Profiles[A_Index]
+			}
+			IniRead, old_section, % this._ININame, % this.CurrentProfile
+			IniWrite, % old_section, % this._ININame, % new_name
+			this.IniWrite(new_list, "!Settings", "ProfileList", "")
+			this.CurrentProfile := new_name
+			this.IniWrite(new_name, "!Settings", "CurrentProfile", "Default")
+			this._BuildProfileDDL()
+		}
 	}
 	
 	_RenameProfile(){
-		
-	}
-	
-	_ProfileCheckDupe(profile){
-		Loop % this._Profiles.length() {
-			if (this._Profiles[A_Index] = profile){
-				return 1
+		if (this.CurrentProfile != "Default"){
+			old_profile := this.CurrentProfile
+			InputBox, new_name, " " , Enter new profile name ,,200 ,130,,,,,
+			if (ErrorLevel = 0){
+				if (!this._IsValidNewProfileName(new_name)){
+					this.AsynchBeep(500, 200)
+					return
+				}
+				IniRead, old_section, % this._ININame, % this.CurrentProfile
+				profiles_added := 0
+				new_list := ""
+				Loop % this._Profiles.length() {
+					if (A_Index = 1){
+						; do not list default
+						continue
+					}
+					if (profiles_added > 0){
+						new_list .= "|"
+					}
+					if (this._Profiles[A_Index] = this.CurrentProfile){
+						item := new_name
+					} else {
+						item := this._Profiles[A_Index]
+					}
+					new_list .= item
+					profiles_added++
+				}
+				IniDelete, % this._ININame, % this.CurrentProfile
+				IniWrite, % old_section, % this._ININame, % new_name
+				this.IniWrite(new_list, "!Settings", "ProfileList", "")
+				this.CurrentProfile := new_name
+				this.IniWrite(new_name, "!Settings", "CurrentProfile", "Default")
+				this._BuildProfileDDL()
 			}
 		}
-		return 0
+	}
+
+	; Checks that a new profile name is valid
+	_IsValidNewProfileName(profile){
+		if (Substr(profile, 1, 1) = "!"){
+			; Do not allow profile names beginning with !
+			return 0
+		}
+		Loop % this._Profiles.length() {
+			if (this._Profiles[A_Index] = profile){
+				return 0
+			}
+		}
+		return 1
 	}
 	
 	; --------- INI Reading / Writing -----------
 	IniRead(Section, key, Default){
-		;IniRead, val, % this._ScriptName, % Section, % this.Name, %A_Space%
-		IniRead, val, % this._ScriptName, % Section, % key, % A_Space
+		;IniRead, val, % this._ININame, % Section, % this.Name, %A_Space%
+		IniRead, val, % this._ININame, % Section, % key, % A_Space
 		if (val = ""){
 			val := Default
 		}
@@ -303,9 +366,9 @@ class _radical {
 	
 	IniWrite(value, section, key, Default){
 		if (value = Default){
-			IniDelete, % this._ScriptName, % Section, % key
+			IniDelete, % this._ININame, % Section, % key
 		} else {
-			IniWrite, % value, % this._ScriptName, % Section, % key
+			IniWrite, % value, % this._ININame, % Section, % key
 		}
 	}
 
@@ -432,14 +495,14 @@ class _radical {
 					this._parent._root._PersistentControls[name] := this
 				}
 			}
-			
+
+			; Loads the value for a control from an INI file.
 			_LoadValue(){
 				this._updating := 1
 				if (this._ForceSection){
 					Section := this._ForceSection
 				} else {
 					Section := this._parent._root.CurrentProfile
-					;this._parent._root._PersistentControls[name] := this
 				}
 				this.value := this._parent._root.IniRead(Section, this.Name, this._DefaultValue)
 				OutputDebug % "Loading Value for " this.name ", profile: " Section ", value = " this.value
@@ -499,6 +562,11 @@ class _radical {
 		}
 	}
 	
+	; Do not call directly, AsynchBeep calls this Asynchronously.
+	_AsynchBeep(freq, dur){
+		SoundBeep % freq, % dur
+	}
+
 	; -------------- Client routines ----------------
 	; Stuff that client scripts are intended to call
 	
@@ -516,6 +584,12 @@ class _radical {
 		
 		this._CurrentTabName := tabs[1]
 		this._CurrentTabIndex := 1
+	}
+	
+	; Send a beep but do not wait for it to finish
+	AsynchBeep(freq, dur){
+		fn := this._AsynchBeep.Bind(this, freq, dur)
+		SetTimer, % fn, -0
 	}
 	
 }
