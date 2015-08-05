@@ -5,8 +5,7 @@ OutputDebug, DBGVIEWCLEAR
 RADical - A Rapid Application Development for AutoHotkey
 
 ToDo:
-* Hotkey GuiControl
-Allow end users to select input / output keys via a GuiControl
+* Hotkey fires up event when user releases key after bind
 
 * Profiles system
 Save sets of persistent settings and allow switching.
@@ -409,7 +408,17 @@ class _radical {
 					} else {
 						hotkey_string .= this._SelectedInput[A_Index].name
 					}
+					last_key := this._SelectedInput[A_Index].vk
 				}
+				
+				; Wait for keys to be released, so that up event for hotkey does not trigger at end of binding
+				OutputDebug % "WAITING FOR " last_key " TO RELEASE"
+				;state := 1
+				;while (DllCall("GetAsyncKeyState", UInt, last_key)){
+				while(GetKeyState(hotkey_string)){
+					sleep 10
+				}
+				OutputDebug % hotkey_string " RELEASED"
 				
 				; trigger __Set meta-func to configure control
 				this.Value := hotkey_string
@@ -426,6 +435,7 @@ class _radical {
 				}
 				return str
 			}
+			
 			; Converts an AHK hotkey string (eg "^+a"), plus the state of WILD and PASSTHROUGH properties to Human Readable format (eg "(WP) CTRL+SHIFT+A")
 			_BuildHumanReadable(hotkey_string){
 				static modifier_names := {"+": "Shift", "^": "Ctrl", "!": "Alt", "#": "Win"}
@@ -716,6 +726,8 @@ class _radical {
 				hotkey, % hkobj.Value " up", On
 			}
 			
+			; Update INI File
+			this.IniWrite(hkobj.Value, this._root.CurrentProfile, hkobj.name, "")
 			OutputDebug % "BINDING: " hkobj._Value
 		}
 		
