@@ -51,6 +51,13 @@ class MyClient extends RADical {
 		; Set the current tab - analagous to Gui, Tab, Settings
 		;this.RADical.Gui("Tab", "Settings")
 		
+		; Define a hotkey and specify the default key and what routine to run when it is pressed
+		fn := this.SendMyStuff.Bind(this)
+		this.RADical.Tabs.Settings.Gui("Add", "Text", "xm ym w300", "RADical Demo:`n`n1) Select a hotkey: ")
+		this.RADical.Tabs.Settings.AddHotkey("SendStuff", fn, "xm yp+40", "F12")
+
+		this.RADical.Tabs.Settings.Gui("Add", "Text", "xm yp+30 w300", "2) Type something in the box ")
+		
 		; Add an Edit box called MyEdit. Coords are relative to the tab canvas, not the whole GUI
 		this.MyEdit := this.RADical.Tabs.Settings.Gui("Add", "Edit", "w100")
 		
@@ -58,9 +65,7 @@ class MyClient extends RADical {
 		fn := this.SettingChanged.bind(this)
 		this.MyEdit.MakePersistent("MyEdit", "Settings Editbox", fn)
 		
-		; Define a hotkey and specify the default key and what routine to run when it is pressed
-		fn := this.SendMyStuff.Bind(this)
-		this.RADical.Tabs.Settings.AddHotkey("SendStuff", fn, "xm y50", "F12")
+		this.RADical.Tabs.Settings.Gui("Add", "Text", "xm yp+30 w300", "3) Press the hotkey you bound.`nA tooltip will appear with the contents of the box on key down, and will disappear on key up. Also note that the settings for the boxes change when you switch profiles.")
 	}
 	
 	; User-defined routine to call when any of the persistent settings change
@@ -75,9 +80,11 @@ class MyClient extends RADical {
 			; Send contents of MyEdit box
 			;Send % this.MyEdit.value
 			this.RADical.AsynchBeep(1000, 200)
+			ToolTip % this.MyEdit.Value
 		} else {
 			; key released
 			this.RADical.AsynchBeep(500, 200)
+			ToolTip
 		}
 	}
 }
@@ -105,7 +112,7 @@ class _radical {
 		this._client := client
 		
 		this._hwnds := {}
-		this._GuiSize := {w: 300, h: 175}	; Default size
+		this._GuiSize := {w: 350, h: 250}	; Default size
 		this._Profiles := []
 		
 		this._Hotkeys := {}					; basic info about hotkeys - bindings etc.
@@ -153,30 +160,45 @@ class _radical {
 		
 		; ================================ Profiles ==========================================
 		; Get list of profiles
-		this.Tabs.Profiles.Gui("Add", "Text", "xm ym", "Current Profile: ")
+		this.Tabs.Profiles.Gui("Add", "Text", "x5 y5", "Current Profile: ")
 		;this._ProfileSelect := this.Tabs.Profiles.Gui("Add", "DDL", "xp+80 yp-3 w150", "Default|" profile_list)
-		this._ProfileSelect := this.Tabs.Profiles.Gui("Add", "DDL", "xp+80 yp-3 w150")
+		this._ProfileSelect := this.Tabs.Profiles.Gui("Add", "DDL", "xp+80 yp-3 w210")
 		this._BuildProfileDDL()
 		
-		this._ProfileAddButton := this.Tabs.Profiles.Gui("Add", "Button", "xm yp+25 center w50", "Add")
+		this._ProfileAddButton := this.Tabs.Profiles.Gui("Add", "Button", "x3 yp+25 center w70", "Add New")
 		fn := this._AddProfile.Bind(this)
 		GuiControl % "+g", % this._ProfileAddButton._hwnd, % fn
 		
-		this._ProfileCopyButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+60 yp center w50", "Copy")
+		this._ProfileCopyButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+75 yp center w70", "Copy")
 		fn := this._CopyProfile.Bind(this)
 		GuiControl % "+g", % this._ProfileCopyButton._hwnd, % fn
 		
-		this._ProfileRenameButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+60 yp center w50", "Rename")
+		this._ProfileRenameButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+75 yp center w70", "Rename")
 		fn := this._RenameProfile.Bind(this)
 		GuiControl % "+g", % this._ProfileRenameButton._hwnd, % fn
 		
-		this._ProfileDeleteButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+60 yp center w50", "Delete")
+		this._ProfileDeleteButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+75 yp center w70", "Delete")
 		fn := this._DeleteProfile.Bind(this)
 		GuiControl % "+g", % this._ProfileDeleteButton._hwnd, % fn
 		
-		this._ProfileSelect._ForceSection := "!Settings"
 		fn := this._ProfileChanged.Bind(this)
-		this._ProfileSelect.MakePersistent("CurrentProfile", "Default", fn)
+		;this._ProfileSelect.MakePersistent("CurrentProfile", "Default", fn)
+		
+		this._ProfileSelect._MakePersistent("!Settings", "CurrentProfile", "Default", fn)
+		
+		; Associated App
+		this.Tabs.Profiles.Gui("Add", "GroupBox", "x1 yp+30 R3.5 w295", "Associated Application:     (NOT IMPLIMENTED YET) ")
+		this.Tabs.Profiles.Gui("Add", "Text", "x10 yp+20", "ahk_class: ")
+		this._AssociatedAppEdit := this.Tabs.Profiles.Gui("Add", "Edit", "xp+60 yp-3 w175")
+		
+		fn := this._AssociatedAppChanged.Bind(this)
+		this._AssociatedAppEdit.MakePersistent("AssociatedAppClass", "", fn)
+		
+		this._AssociatedAppLimit := this.Tabs.Profiles.Gui("Add", "Checkbox", "x10 yp+25", "Limit hotkeys to only work in Associated App")
+		this._AssociatedAppLimit.MakePersistent("AssociatedAppLimit", 0, fn)
+		
+		this._AssociatedAppSwitch := this.Tabs.Profiles.Gui("Add", "Checkbox", "x10 yp+20", "Switch to this profile when Associated App is active")
+		this._AssociatedAppSwitch.MakePersistent("AssociatedAppSwitch", 0, fn)
 		
 		; Load non-client GUI elements values
 		this._ProfileSelect._LoadValue()
@@ -190,22 +212,26 @@ class _radical {
 		this._StartingUp := 0
 	}
 	
+	_AssociatedAppChanged(){
+		;SoundBeep
+		
+	}
+	
 	_ProfileChanged(){
 		OutputDebug % "ProfileChanged : Processing change to profile " this._ProfileSelect.value
 		this.CurrentProfile := this._ProfileSelect.value
 		;ToolTip % this._ProfileSelect.value
-		for name, hk in this._Hotkeys {
-			val := this.IniRead(this.CurrentProfile, Name, hk.obj._DefaultValue)
-			OutputDebug % "ProfileChanged: Loading hotkey setting for " name ", value = " val
-			hk.obj.value := val
-		}
-
 		for name, obj in this._PersistentControls {
 			; Load new Control value for this profile
 			OutputDebug % "ProfileChanged: Loading persistent setting for " obj.name
 			obj._LoadValue()
 		}
-		
+
+		for name, hk in this._Hotkeys {
+			val := this.IniRead(this.CurrentProfile, Name, hk.obj._DefaultValue)
+			OutputDebug % "ProfileChanged: Loading hotkey setting for " name ", value = " val
+			hk.obj.value := val
+		}
 	}
 	
 	_BuildProfileDDL(){
@@ -482,6 +508,12 @@ class _radical {
 				}
 			}
 			
+			; Internal MakePersistent - section is static, not dictated by current profile
+			_MakePersistent(Section, name, Default, glabel := 0){
+				this._ForceSection := Section
+				this.MakePersistent(name, Default, glabel)
+			}
+			
 			; Makes a Gui Control persistent - value is saved in settings file
 			MakePersistent(Name, Default := "", glabel := 0){
 				; ToDo: Check for uniqueness of name
@@ -491,9 +523,9 @@ class _radical {
 				if (Default != ""){
 					this._DefaultValue := Default
 				}
-				if (!this._ForceSection){
+				;if (!this._ForceSection){
 					this._parent._root._PersistentControls[name] := this
-				}
+				;}
 			}
 
 			; Loads the value for a control from an INI file.
@@ -531,6 +563,9 @@ class _radical {
 				hotkey, % this._root._Hotkeys[hkobj.name].binding, Off
 				hotkey, % this._root._Hotkeys[hkobj.name].binding " up", Off
 			}
+			if (hkobj.Value = ""){
+				return
+			}
 			; Bind new hotkey
 			this._root._Hotkeys[hkobj.name].binding := hkobj.Value
 			
@@ -558,6 +593,13 @@ class _radical {
 		
 		; A bound hotkey changed state (ie was pressed or released)
 		_HotkeyChangedState(hkobj, event){
+			static state
+			; Block duplicate down events for hotkeys
+			if (state = event){
+				return
+			}
+			state := event
+			; Fire callback
 			this._root._Hotkeys[hkobj.name].callback.(event)
 		}
 	}
