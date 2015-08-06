@@ -6,7 +6,8 @@ RADical - A Rapid Application Development framework for AutoHotkey
 
 ToDo:
 
-* Hotkey bound, removed, bound due to _AssociatedAppChanged
+* _HotkeyChangedBinding fires twice on profile change
+To do with _AssociatedAppChanged
 
 * Profiles system
 + Streamline Add / Delete / Copy / Rename code
@@ -171,6 +172,23 @@ class _radical {
 		fn := this._ProfileChanged.Bind(this)
 		;this._ProfileSelect._MakePersistent("!Settings", "CurrentProfile", "Default", fn)
 		this._ProfileSelect._MakePersistent("CurrentProfile", "Default", fn)
+		
+		; Profile manipulation
+		this._ProfileAddButton := this.Tabs.Profiles.Gui("Add", "Button", "x3 yp+25 center w70", "Add New")
+		fn := this._AddProfile.Bind(this)
+		GuiControl % "+g", % this._ProfileAddButton._hwnd, % fn
+		
+		this._ProfileCopyButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+75 yp center w70", "Copy")
+		fn := this._CopyProfile.Bind(this)
+		GuiControl % "+g", % this._ProfileCopyButton._hwnd, % fn
+		
+		this._ProfileRenameButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+75 yp center w70", "Rename")
+		fn := this._RenameProfile.Bind(this)
+		GuiControl % "+g", % this._ProfileRenameButton._hwnd, % fn
+		
+		this._ProfileDeleteButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+75 yp center w70", "Delete")
+		fn := this._DeleteProfile.Bind(this)
+		GuiControl % "+g", % this._ProfileDeleteButton._hwnd, % fn
 
 		; Associated App
 		this.Tabs.Profiles.Gui("Add", "GroupBox", "x1 yp+30 R3.5 w295", "Associated Application:")
@@ -188,82 +206,30 @@ class _radical {
 		
 		; Set value of this.CurrentProfile
 		this._ProfileSelect._LoadValue()
-		/*
-		; Add non-client GUIcontrols
-		
-		; ================================ Profiles ==========================================
-		; Get list of profiles
-		this.Tabs.Profiles.Gui("Add", "Text", "x5 y5", "Current Profile: ")
-		;this._ProfileSelect := this.Tabs.Profiles.Gui("Add", "DDL", "xp+80 yp-3 w150", "Default|" profile_list)
-		this._ProfileSelect := this.Tabs.Profiles.Gui("Add", "DDL", "xp+80 yp-3 w210")
-		this._BuildProfileDDL()
-		
-		this._ProfileAddButton := this.Tabs.Profiles.Gui("Add", "Button", "x3 yp+25 center w70", "Add New")
-		fn := this._AddProfile.Bind(this)
-		GuiControl % "+g", % this._ProfileAddButton._hwnd, % fn
-		
-		this._ProfileCopyButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+75 yp center w70", "Copy")
-		fn := this._CopyProfile.Bind(this)
-		GuiControl % "+g", % this._ProfileCopyButton._hwnd, % fn
-		
-		this._ProfileRenameButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+75 yp center w70", "Rename")
-		fn := this._RenameProfile.Bind(this)
-		GuiControl % "+g", % this._ProfileRenameButton._hwnd, % fn
-		
-		this._ProfileDeleteButton := this.Tabs.Profiles.Gui("Add", "Button", "xp+75 yp center w70", "Delete")
-		fn := this._DeleteProfile.Bind(this)
-		GuiControl % "+g", % this._ProfileDeleteButton._hwnd, % fn
-		
-		fn := this._ProfileChanged.Bind(this)
-		;this._ProfileSelect.MakePersistent("CurrentProfile", "Default", fn)
-		
-		this._ProfileSelect._MakePersistent("!Settings", "CurrentProfile", "Default", fn)
-		
-		; Associated App
-		this.Tabs.Profiles.Gui("Add", "GroupBox", "x1 yp+30 R3.5 w295", "Associated Application:")
-		this.Tabs.Profiles.Gui("Add", "Text", "x10 yp+20", "ahk_class: ")
-		this._AssociatedAppEdit := this.Tabs.Profiles.Gui("Add", "Edit", "xp+60 yp-3 w175")
-		
-		fn := this._AssociatedAppChanged.Bind(this)
-		this._AssociatedAppEdit.MakePersistent("AssociatedAppClass", "", fn)
-		
-		this._AssociatedAppLimit := this.Tabs.Profiles.Gui("Add", "Checkbox", "x10 yp+25", "Limit hotkeys to only work in Associated App")
-		this._AssociatedAppLimit.MakePersistent("AssociatedAppLimit", 0, fn)
-		
-		this._AssociatedAppSwitch := this.Tabs.Profiles.Gui("Add", "Checkbox", "x10 yp+20 disabled", "Switch to this profile when Associated App is active")
-		this._AssociatedAppSwitch.MakePersistent("AssociatedAppSwitch", 0, fn)
-		
-		; Load non-client GUI elements values
-		this._ProfileSelect._LoadValue()
-		
 
-		;this._ProfileChanged()
-		*/
 		OutputDebug % "RADical._GuiCreate END"
 	}
 	
 	_StartupDone(){
 		OutputDebug % "RADical._StartupDone START"
-		
 		; Kick off loading of settings
-		this._ProfileChanged()
-
-		/*
+		
+		this._Profiles := StrSplit(this.IniRead("!Settings", "CurrentProfileList", "Default"), "|")
 		this._ProfileChanged()
 		this._StartingUp := 0
-		*/
+
 		OutputDebug % "RADical._StartupDone END"
 		OutputDebug % " "
 	}
 	
 	_AssociatedAppChanged(){
-		/*
+		; Associated app settings were changed - rebind hotkeys
 		for name, hk in this._Hotkeys {
 			hk.ctrl._HotkeyChangedBinding(hk.obj)
 		}
-		*/
 	}
 	
+	; Profile changed - load new settings and re-bind hotkeys
 	_ProfileChanged(){
 		val := this._ProfileSelect.value
 		OutputDebug % "RADical._ProfileChanged START, profile='" val "'"
@@ -284,40 +250,22 @@ class _radical {
 			hk.obj.value := val
 		}
 
-		/*
-		OutputDebug % "ProfileChanged : Processing change to profile " this._ProfileSelect.value
-		this.CurrentProfile := this._ProfileSelect.value
-		;ToolTip % this._ProfileSelect.value
-		for name, obj in this._PersistentControls {
-			; Load new Control value for this profile
-			OutputDebug % "ProfileChanged: Loading persistent setting for " obj.name
-			obj._LoadValue()
-		}
-
-		for name, hk in this._Hotkeys {
-			val := this.IniRead(this.CurrentProfile, Name, hk.obj._DefaultValue)
-			OutputDebug % "ProfileChanged: Loading hotkey setting for " name ", value = " val
-			hk.obj.value := val
-		}
-		*/
 		OutputDebug % "RADical._ProfileChanged END"
 	}
 	
 	_BuildProfileDDL(){
-		/*
-		this._Profiles := ["Default"]
-		profile_list := this.IniRead("!Settings", "ProfileList", "")
+		this._Profiles := []
+		profile_list := "|" this.IniRead("!Settings", "CurrentProfileList", "")
 		profile_arr := StrSplit(profile_list, "|")
 		Loop % profile_arr.length() {
 			this._Profiles.push(profile_arr[A_Index])
 		}
-		GuiControl, , % this._ProfileSelect._hwnd, % "|Default|" profile_list
+		;GuiControl, , % this._ProfileSelect._hwnd, % "|Default|" profile_list
+		GuiControl, , % this._ProfileSelect._hwnd, % profile_list
 		GuiControl, choose,  % this._ProfileSelect._hwnd, % this.CurrentProfile
 		this._ProfileChanged()
-		*/
 	}
 	
-	/*
 	_AddProfile(){
 		InputBox, new_name, " " , Enter new profile name ,,200 ,130,,,,,
 		if (ErrorLevel = 0){
@@ -329,17 +277,19 @@ class _radical {
 			}
 			this._Profiles.push(new_name)
 			new_list := ""
+			profiles_added := 0
 			Loop % this._Profiles.length() {
-				if (A_Index = 1){
+				;if (A_Index = 1){
 					; do not list default
-					continue
-				}
-				if (A_Index != 2){
+				;	continue
+				;}
+				if (profiles_added){
 					new_list .= "|"
 				}
 				new_list .= this._Profiles[A_Index]
+				profiles_added++
 			}
-			this.IniWrite(new_list, "!Settings", "ProfileList", "")
+			this.IniWrite(new_list, "!Settings", "CurrentProfileList", "")
 			this.CurrentProfile := new_name
 			this.IniWrite(new_name, "!Settings", "CurrentProfile", "Default")
 			this._BuildProfileDDL()
@@ -353,18 +303,18 @@ class _radical {
 			new_list := ""
 			profiles_added := 0
 			Loop % this._Profiles.length() {
-				if (A_Index = 1 || this._Profiles[A_Index] = this.CurrentProfile){
-					; do not list default or deleted profile
+				if (this._Profiles[A_Index] = this.CurrentProfile){
+					; do not list deleted profile
 					continue
 				}
-				if (profiles_added > 0){
+				if (profiles_added){
 					new_list .= "|"
 				}
 				new_list .= this._Profiles[A_Index]
 				profiles_added++
 			}
 			IniDelete, % this._ININame, % this.CurrentProfile
-			this.IniWrite(new_list, "!Settings", "ProfileList", "")
+			this.IniWrite(new_list, "!Settings", "CurrentProfileList", "")
 			this.CurrentProfile := "Default"
 			this.IniWrite("Default", "!Settings", "CurrentProfile", "Default")
 			this._BuildProfileDDL()
@@ -380,20 +330,18 @@ class _radical {
 			}
 			this._Profiles.push(new_name)
 			
+			profiles_added := 0
 			new_list := ""
 			Loop % this._Profiles.length() {
-				if (A_Index = 1){
-					; do not list default
-					continue
-				}
-				if (A_Index != 2){
+				if (profiles_added){
 					new_list .= "|"
 				}
 				new_list .= this._Profiles[A_Index]
+				profiles_added++
 			}
 			IniRead, old_section, % this._ININame, % this.CurrentProfile
 			IniWrite, % old_section, % this._ININame, % new_name
-			this.IniWrite(new_list, "!Settings", "ProfileList", "")
+			this.IniWrite(new_list, "!Settings", "CurrentProfileList", "")
 			this.CurrentProfile := new_name
 			this.IniWrite(new_name, "!Settings", "CurrentProfile", "Default")
 			this._BuildProfileDDL()
@@ -413,10 +361,6 @@ class _radical {
 				profiles_added := 0
 				new_list := ""
 				Loop % this._Profiles.length() {
-					if (A_Index = 1){
-						; do not list default
-						continue
-					}
 					if (profiles_added > 0){
 						new_list .= "|"
 					}
@@ -430,14 +374,13 @@ class _radical {
 				}
 				IniDelete, % this._ININame, % this.CurrentProfile
 				IniWrite, % old_section, % this._ININame, % new_name
-				this.IniWrite(new_list, "!Settings", "ProfileList", "")
+				this.IniWrite(new_list, "!Settings", "CurrentProfileList", "")
 				this.CurrentProfile := new_name
 				this.IniWrite(new_name, "!Settings", "CurrentProfile", "Default")
 				this._BuildProfileDDL()
 			}
 		}
 	}
-	*/
 
 	; Checks that a new profile name is valid
 	_IsValidNewProfileName(profile){
@@ -565,29 +508,6 @@ class _radical {
 		
 			_OnChange(){
 				OutputDebug % "GuiControl._OnChange START: '" this.name "'"
-				/*
-				; Update persistent settings
-				if (this.Name){
-					; Write settings to file
-					; ToDo: Make Asynchronous
-					if (!this._updating){
-						if (this._ForceSection){
-							Section := this._ForceSection
-						} else {
-							Section := this._parent._root.CurrentProfile
-						}
-						this._parent._root.IniWrite(this.value, Section, this.Name, this._DefaultValue)
-					}
-					
-					; Call user glabel
-					if (ObjHasKey(this,"_glabel") && this._glabel != 0){
-						OutputDebug % "CGuiControl._OnChange: Firing callback for " this.name
-						;%this._glabel%() ; ahk v2
-						this._glabel.() ; ahk v1
-					}
-				}
-				*/
-				
 				if (this.Name){
 					this._parent._root.IniWrite(this.value, this._GetSectionName(this), this.Name, this._DefaultValue)
 					
@@ -603,19 +523,15 @@ class _radical {
 			}
 			
 			; Internal MakePersistent - section is static, not dictated by current profile
-			;_MakePersistent(Section, name, Default, glabel := 0){
 			_MakePersistent(name, Default, glabel := 0){
 				;OutputDebug % "_GuiControl._MakePersistent START: Name = '" name "'"
 				this._ProfileSpecific := 0
 				this.MakePersistent(name, Default, glabel)
-				/*
-				this._ForceSection := Section
-				this.MakePersistent(name, Default, glabel)
-				*/
 			}
 			
 			; Makes a Gui Control persistent - value is saved in settings file
 			MakePersistent(Name, Default := "", glabel := 0){
+				; ToDo: Check for uniqueness of name
 				OutputDebug % "_GuiControl.MakePersistent START: Name= '" name "', Profile Specific= " this._ProfileSpecific ", CtrlType: " this._CtrlType
 				this.Name := Name
 				this._glabel := glabel
@@ -631,18 +547,6 @@ class _radical {
 				this._DefaultValue := Default
 				; Add to list of Persistent controls
 				this._root._PersistentControls[name] := this
-				/*
-				; ToDo: Check for uniqueness of name
-				OutputDebug % "MakePersistent: Name = " name ", Default = " Default
-				this.Name := Name
-				this._glabel := glabel
-				if (Default != ""){
-					this._DefaultValue := Default
-				}
-				;if (!this._ForceSection){
-					this._parent._root._PersistentControls[name] := this
-				;}
-				*/
 				OutputDebug % "_GuiControl.MakePersistent END"
 			}
 			
@@ -673,17 +577,6 @@ class _radical {
 				OutputDebug % "_GuiControl._LoadValue START: name= '" this.Name "', Section: " Section
 				val := this._root.IniRead(Section, this.Name, this._DefaultValue)
 				this.value := val
-				/*
-				this._updating := 1
-				if (this._ForceSection){
-					Section := this._ForceSection
-				} else {
-					Section := this._parent._root.CurrentProfile
-				}
-				this.value := this._parent._root.IniRead(Section, this.Name, this._DefaultValue)
-				OutputDebug % "Loading Value for " this.name ", profile: " Section ", value = " this.value
-				this._updating := 0
-				*/
 			}
 			
 		}
@@ -703,36 +596,32 @@ class _radical {
 
 		; A Hotkey changed binding
 		_HotkeyChangedBinding(hkobj){
-			/*
-			;ToolTip % hkobj.Value
-			if (ObjHasKey(this._root._Hotkeys[hkobj.name], "binding") && this._root._Hotkeys[hkobj.name].binding){
-				cls := ""
-				if (ObjHasKey(this._root._Hotkeys[hkobj.name], "winactive") && this._root._Hotkeys[hkobj.name].winactive){
-					cls := this._root._Hotkeys[hkobj.name].winactive
-				}
-				hotkey, IfWinActive, % cls
-				
-				OutputDebug % "Removing old binding " this._root._Hotkeys[hkobj.name].binding ", class: " cls
-				; hotkey already bound, un-bind first
-				hotkey, % this._root._Hotkeys[hkobj.name].binding, Off
-				;hotkey, % this._root._Hotkeys[hkobj.name].binding " up", Off
-			}
-			if (hkobj.Value = ""){
+			if (this._root._StartingUp){
 				return
 			}
-			; Bind new hotkey
-			this._root._Hotkeys[hkobj.name].binding := hkobj.Value
+			OutputDebug % "Tab._HotkeyChangedBinding: name='" hkobj.name "'"
+			app := ""
+			if (ObjHasKey(this._root._Hotkeys[hkobj.name], "binding") && this._root._Hotkeys[hkobj.name].binding){
+				;OutputDebug % "OLD BINIDNG EXISTS"
+				if (ObjHasKey(this._root._Hotkeys[hkobj.name], "AssociatedApp") && this._root._Hotkeys[hkobj.name].AssociatedApp){
+					;OutputDebug % "REMOVING OLD BINDING - HK: " this._root._Hotkeys[hkobj.name].binding " APP: " this._root._Hotkeys[hkobj.name].AssociatedApp
+					hotkey, IfWinActive, % "ahk_class " this._root._Hotkeys[hkobj.name].AssociatedApp
+				}
+				hotkey, % this._root._Hotkeys[hkobj.name].binding, Off
+			}
+			;OutputDebug % "SETTING NEW BINDING"
 			
-			
+			app := ""
 			cls := ""
 			if (this._root._AssociatedAppLimit.Value && this._root._AssociatedAppEdit.Value){
-				cls := "ahk_class " this._root._AssociatedAppEdit.Value
+				cls := this._root._AssociatedAppEdit.Value
+				app := "ahk_class " cls
 			}
-			this._root._Hotkeys[hkobj.name].winactive := cls
+			this._root._Hotkeys[hkobj.name].Binding := hkobj.Value
+			this._root._Hotkeys[hkobj.name].AssociatedApp := cls
+			hotkey, IfWinActive, % app
 			
 			if (hkobj.Value){
-				hotkey, IfWinActive, % cls
-				OutputDebug % "Adding new binding " hkobj.Value ", class: " cls
 				; Bind Down Event
 				fn := this._HotkeyChangedState.bind(this, hkobj, 1)
 				hotkey, % hkobj.Value, % fn
@@ -743,21 +632,10 @@ class _radical {
 				hotkey, % hkobj.Value " up", % fn
 				hotkey, % hkobj.Value " up", On
 			}
-
-			; Don't write to INI when starting up
-			if (this._root._StartingUp){
-				return
-			}
-
-			; Update INI File
-			this._root.IniWrite(hkobj.Value, this._root.CurrentProfile, hkobj.name, hkobj._DefaultValue)
-			OutputDebug % "BINDING: " hkobj._Value ", DEF: " hkobj._DefaultValue
-			*/
 		}
 		
 		; A bound hotkey changed state (ie was pressed or released)
 		_HotkeyChangedState(hkobj, event){
-			/*
 			; Block duplicate down events for hotkeys
 			if (hkobj._state = event){
 				return
@@ -765,7 +643,6 @@ class _radical {
 			hkobj._state := event
 			; Fire callback
 			this._root._Hotkeys[hkobj.name].callback.(event)
-			*/
 		}
 	}
 	
