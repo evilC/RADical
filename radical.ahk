@@ -9,6 +9,8 @@ ToDo:
 * _HotkeyChangedBinding fires twice on profile change
 To do with _AssociatedAppChanged
 
+* Associated App - uncheck and disable AssociatedAppSwitch if another profile exists that shares the same class.
+
 * Profiles system
 + Streamline Add / Delete / Copy / Rename code
 + Allow Auto switching of profiles based upon active application
@@ -130,6 +132,7 @@ class _radical {
 		
 		SplitPath, % A_ScriptName,,,,ScriptName
 		this._ININame := ScriptName ".ini"
+		
 		OutputDebug % "RADical._New END"
 	}
 	
@@ -171,7 +174,9 @@ class _radical {
 		this._ProfileSelect := this.Tabs.Profiles.Gui("Add", "DDL", "xp+80 yp-3 w210")
 		fn := this._ProfileChanged.Bind(this)
 		;this._ProfileSelect._MakePersistent("!Settings", "CurrentProfile", "Default", fn)
+		this._ProfileSelect._IsProfileDDL := 1
 		this._ProfileSelect._MakePersistent("CurrentProfile", "Default", fn)
+		this._BuildProfileDDL()
 		
 		; Profile manipulation
 		this._ProfileAddButton := this.Tabs.Profiles.Gui("Add", "Button", "x3 yp+25 center w70", "Add New")
@@ -201,8 +206,9 @@ class _radical {
 		this._AssociatedAppLimit := this.Tabs.Profiles.Gui("Add", "Checkbox", "x10 yp+25", "Limit hotkeys to only work in Associated App")
 		this._AssociatedAppLimit.MakePersistent("AssociatedAppLimit", 0, fn)
 		
-		this._AssociatedAppSwitch := this.Tabs.Profiles.Gui("Add", "Checkbox", "x10 yp+20 disabled", "Switch to this profile when Associated App is active")
-		this._AssociatedAppSwitch.MakePersistent("AssociatedAppSwitch", 0, fn)
+		this._AssociatedAppSwitch := this.Tabs.Profiles.Gui("Add", "Checkbox", "x10 yp+20", "Switch to this profile when Associated App is active")
+		;this._AssociatedAppSwitch.MakePersistent("AssociatedAppSwitch", 0, fn)
+		this._AssociatedAppSwitch.MakePersistent("AssociatedAppSwitch", 0)
 		
 		; Set value of this.CurrentProfile
 		this._ProfileSelect._LoadValue()
@@ -214,19 +220,68 @@ class _radical {
 		OutputDebug % "RADical._StartupDone START"
 		; Kick off loading of settings
 		
-		this._Profiles := StrSplit(this.IniRead("!Settings", "CurrentProfileList", "Default"), "|")
+		;this._Profiles := StrSplit(this.IniRead("!Settings", "CurrentProfileList", "Default"), "|")
 		this._ProfileChanged()
 		this._StartingUp := 0
+		
+		; Associated App switching
+		DllCall( "RegisterShellHookWindow", UInt, this._hwnds.MainWindow )
+		MsgNum := DllCall( "RegisterWindowMessage", Str,"SHELLHOOK" )
+		fn := this._ActiveWindowChanged.Bind(this)
+		OnMessage( MsgNum, fn )
 
 		OutputDebug % "RADical._StartupDone END"
 		OutputDebug % " "
 	}
 	
+	; Called when the active window changes.
+	; Check Associated App settings to see if we should change profile.
+	_ActiveWindowChanged(wParam, lParam){
+		;if (this._AssociatedAppSwitch.Value && lParam != this._hwnds.MainWindow){
+		if (lParam != this._hwnds.MainWindow){
+			; Current window is not the MainWindow
+			
+			; Does the class match any of the profiles?
+			
+			if (lParam != 0){
+				; Desktop active
+				WinGetClass, cls, % "ahk_id " lParam
+				if (ObjHasKey(this._AssociatedApps, cls)){
+					; Match found
+					profile := this._AssociatedApps[cls]
+					if (profile != this.CurrentProfile){
+						;MsgBox % "change to " profile
+						this.CurrentProfile := profile
+						this.IniWrite(profile, "!Settings", "CurrentProfile", "Default")
+						GuiControl, choose, % this._ProfileSelect._hwnd, % profile
+						this._ProfileChanged()
+					}
+					return
+				}
+			}
+			
+			; Check default profile
+			if (ObjHasKey(this._AssociatedApps, 0)){
+				profile := this._AssociatedApps[0]
+				if (profile != this.CurrentProfile){
+					;MsgBox % "change to " profile
+					this.CurrentProfile := profile
+					this.IniWrite(profile, "!Settings", "CurrentProfile", "Default")
+					GuiControl, choose, % this._ProfileSelect._hwnd, % profile
+					this._ProfileChanged()
+				}
+			}
+		}
+	}
+	
 	_AssociatedAppChanged(){
-		; Associated app settings were changed - rebind hotkeys
+		; Associated app settings were changed
+		
+		; Rebind hotkeys
 		for name, hk in this._Hotkeys {
 			hk.ctrl._HotkeyChangedBinding(hk.obj)
 		}
+		
 	}
 	
 	; Profile changed - load new settings and re-bind hotkeys
@@ -253,17 +308,47 @@ class _radical {
 		OutputDebug % "RADical._ProfileChanged END"
 	}
 	
+	; Builds the profile DDL, and handles associated tasks
 	_BuildProfileDDL(){
 		this._Profiles := []
-		profile_list := "|" this.IniRead("!Settings", "CurrentProfileList", "")
+		profile_list := this.IniRead("!Settings", "CurrentProfileList", "")
 		profile_arr := StrSplit(profile_list, "|")
+		
+		this._AssociatedApps := {}
 		Loop % profile_arr.length() {
-			this._Profiles.push(profile_arr[A_Index])
+			profile := profile_arr[A_Index]
+			this._Profiles.push(profile)
+			AssociatedAppSwitch := this.IniRead(profile, "AssociatedAppSwitch", 0)
+			if (AssociatedAppSwitch){
+				AssociatedAppClass := this.IniRead(profile, "AssociatedAppClass", "")
+				cls := ""
+				if (AssociatedAppClass){
+					cls := AssociatedAppClass
+				} else if (profile = "Default"){
+					cls := 0
+				}
+				;this._AssociatedApps[profile_arr[A_Index]] := profile_arr[A_Index]
+				if (cls != ""){
+					this._AssociatedApps[cls] := profile
+				}
+			}
+			;this._AssociatedApps[
+			;MsgBox % "Profile: " profile_arr[A_Index] ", app: " AssociatedAppClass
 		}
+		
+		/*
+		; Build List of Associated Apps per profile
+		this._AssociatedApps := {}
+		Loop % this._Profiles.length(){
+			; Find associated app for this profile
+			;MsgBox % this._Profiles[A_Index]
+		}
+		*/
+
 		;GuiControl, , % this._ProfileSelect._hwnd, % "|Default|" profile_list
-		GuiControl, , % this._ProfileSelect._hwnd, % profile_list
+		GuiControl, , % this._ProfileSelect._hwnd, % "|" profile_list
 		GuiControl, choose,  % this._ProfileSelect._hwnd, % this.CurrentProfile
-		this._ProfileChanged()
+		;this._ProfileChanged()
 	}
 	
 	_AddProfile(){
@@ -293,6 +378,7 @@ class _radical {
 			this.CurrentProfile := new_name
 			this.IniWrite(new_name, "!Settings", "CurrentProfile", "Default")
 			this._BuildProfileDDL()
+			this._ProfileChanged()
 		}
 	}
 	
@@ -318,6 +404,7 @@ class _radical {
 			this.CurrentProfile := "Default"
 			this.IniWrite("Default", "!Settings", "CurrentProfile", "Default")
 			this._BuildProfileDDL()
+			this._ProfileChanged()
 		}
 	}
 	
@@ -345,6 +432,7 @@ class _radical {
 			this.CurrentProfile := new_name
 			this.IniWrite(new_name, "!Settings", "CurrentProfile", "Default")
 			this._BuildProfileDDL()
+			this._ProfileChanged()
 		}
 	}
 	
@@ -378,6 +466,7 @@ class _radical {
 				this.CurrentProfile := new_name
 				this.IniWrite(new_name, "!Settings", "CurrentProfile", "Default")
 				this._BuildProfileDDL()
+				this._ProfileChanged()
 			}
 		}
 	}
@@ -481,6 +570,7 @@ class _radical {
 				this._updating := 0			; Set to 1 when writing to GuiControl, to stop it writing to the settings file
 				;this._ForceSection := ""	; Used to store setting not by profile, but in the settings section
 				this._ProfileSpecific := 1	; Whether the control is a Profile Specific (Saved in current profile's section) or a Global Control (Saved in !Settings section)
+				this._IsProfileDDL := 0		; The Profile Select DDL is a special case, use this flag to determine if the control is the Profile Select DDL
 				
 				Gui, % this._parent._hwnd ":Add", % ctrltype, % "hwndhwnd " options, % text
 				this._hwnd := hwnd
@@ -537,7 +627,7 @@ class _radical {
 				this._glabel := glabel
 
 				; If Ctrl Type is a ListBox, Combobox etc, load values from settings now
-				if (this._IsListType(this._CtrlType)){
+				if (!this._IsProfileDDL && this._IsListType(this._CtrlType)){
 					;this._parent.GuiControl("", this, "A|B|C")
 					val := this._root.IniRead(this._GetSectionName(this), this.Name "List", this._DefaultValue)
 					; Populate Items
