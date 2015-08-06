@@ -2,11 +2,11 @@
 OutputDebug, DBGVIEWCLEAR
 
 /*
-RADical - A Rapid Application Development for AutoHotkey
+RADical - A Rapid Application Development framework for AutoHotkey
 
 ToDo:
 
-* Suppress repeat of down events for hotkeys
+* Hotkey bound, removed, bound due to _AssociatedAppChanged
 
 * Profiles system
 + Streamline Add / Delete / Copy / Rename code
@@ -213,8 +213,9 @@ class _radical {
 	}
 	
 	_AssociatedAppChanged(){
-		;SoundBeep
-		
+		for name, hk in this._Hotkeys {
+			hk.ctrl._HotkeyChangedBinding(hk.obj)
+		}
 	}
 	
 	_ProfileChanged(){
@@ -552,6 +553,7 @@ class _radical {
 			hk := new this._CHotkeyControl(this._hwnd, name, fn, options, "")
 			hk._DefaultValue := Default
 			this._root._Hotkeys[name].obj := hk
+			this._root._Hotkeys[name].ctrl := this
 			return hk
 		}
 
@@ -564,9 +566,11 @@ class _radical {
 					cls := this._root._Hotkeys[hkobj.name].winactive
 				}
 				hotkey, IfWinActive, % cls
+				
+				OutputDebug % "Removing old binding " this._root._Hotkeys[hkobj.name].binding ", class: " cls
 				; hotkey already bound, un-bind first
 				hotkey, % this._root._Hotkeys[hkobj.name].binding, Off
-				hotkey, % this._root._Hotkeys[hkobj.name].binding " up", Off
+				;hotkey, % this._root._Hotkeys[hkobj.name].binding " up", Off
 			}
 			if (hkobj.Value = ""){
 				return
@@ -580,9 +584,10 @@ class _radical {
 				cls := "ahk_class " this._root._AssociatedAppEdit.Value
 			}
 			this._root._Hotkeys[hkobj.name].winactive := cls
-			hotkey, IfWinActive, % cls
 			
 			if (hkobj.Value){
+				hotkey, IfWinActive, % cls
+				OutputDebug % "Adding new binding " hkobj.Value ", class: " cls
 				; Bind Down Event
 				fn := this._HotkeyChangedState.bind(this, hkobj, 1)
 				hotkey, % hkobj.Value, % fn
