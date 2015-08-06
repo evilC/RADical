@@ -99,9 +99,13 @@ class MyClient extends RADical {
 class RADical {
 	__New(){
 		this.RADical := new _radical(this)
+		OutputDebug % "Initializing Client Script Init START"
 		this.Init()
+		OutputDebug % "Initializing Client Script Init END"
 		this.RADical._GuiCreate()
+		OutputDebug % "Initializing Client Script Main START"
 		this.Main()
+		OutputDebug % "Initializing Client Script Main END"
 		this.RADical._StartupDone()
 	}
 }
@@ -111,6 +115,7 @@ class _radical {
 	; --------------------- Internal Routines ---------------------
 	; Behind-the-scenes stuff the user should not be touching
 	__New(client){
+		OutputDebug % "RADical._New START"
 		this._myname := "Library" ; debugging
 		this._client := client
 		
@@ -119,15 +124,17 @@ class _radical {
 		this._Profiles := []
 		
 		this._Hotkeys := {}					; basic info about hotkeys - bindings etc.
-		this._PersistentControls := {}		; Array of profile-specific persistent controls
+		this._PersistentControls := {}		; Array of persistent controls
 		this._StartingUp := 1
 		
 		SplitPath, % A_ScriptName,,,,ScriptName
 		this._ININame := ScriptName ".ini"
+		OutputDebug % "RADical._New END"
 	}
 	
 	; Create the main GUI
 	_GuiCreate(){
+		OutputDebug % "RADical._GuiCreate START"
 		; Create Main GUI Window
 		Gui, New, HwndhMain
 		this._hwnds.MainWindow := hMain
@@ -159,7 +166,30 @@ class _radical {
 			this.Tabs[this._TabIndex[A_Index]] := new this._CGui(this, hGuiArea)
 		}
 		
-		; Add non-client GUI elements
+		this.Tabs.Profiles.Gui("Add", "Text", "x5 y5", "Current Profile: ")
+		this._ProfileSelect := this.Tabs.Profiles.Gui("Add", "DDL", "xp+80 yp-3 w210")
+		fn := this._ProfileChanged.Bind(this)
+		;this._ProfileSelect._MakePersistent("!Settings", "CurrentProfile", "Default", fn)
+		this._ProfileSelect._MakePersistent("CurrentProfile", "Default", fn)
+
+		; Associated App
+		this.Tabs.Profiles.Gui("Add", "GroupBox", "x1 yp+30 R3.5 w295", "Associated Application:")
+		this.Tabs.Profiles.Gui("Add", "Text", "x10 yp+20", "ahk_class: ")
+		this._AssociatedAppEdit := this.Tabs.Profiles.Gui("Add", "Edit", "xp+60 yp-3 w175")
+		
+		fn := this._AssociatedAppChanged.Bind(this)
+		this._AssociatedAppEdit.MakePersistent("AssociatedAppClass", "", fn)
+		
+		this._AssociatedAppLimit := this.Tabs.Profiles.Gui("Add", "Checkbox", "x10 yp+25", "Limit hotkeys to only work in Associated App")
+		this._AssociatedAppLimit.MakePersistent("AssociatedAppLimit", 0, fn)
+		
+		this._AssociatedAppSwitch := this.Tabs.Profiles.Gui("Add", "Checkbox", "x10 yp+20 disabled", "Switch to this profile when Associated App is active")
+		this._AssociatedAppSwitch.MakePersistent("AssociatedAppSwitch", 0, fn)
+		
+		; Set value of this.CurrentProfile
+		this._ProfileSelect._LoadValue()
+		/*
+		; Add non-client GUIcontrols
 		
 		; ================================ Profiles ==========================================
 		; Get list of profiles
@@ -208,20 +238,47 @@ class _radical {
 		
 
 		;this._ProfileChanged()
+		*/
+		OutputDebug % "RADical._GuiCreate END"
 	}
 	
 	_StartupDone(){
+		OutputDebug % "RADical._StartupDone START"
+		
+		; Kick off loading of settings
+		this._ProfileChanged()
+
+		/*
 		this._ProfileChanged()
 		this._StartingUp := 0
+		*/
+		OutputDebug % "RADical._StartupDone END"
+		OutputDebug % " "
 	}
 	
 	_AssociatedAppChanged(){
+		/*
 		for name, hk in this._Hotkeys {
 			hk.ctrl._HotkeyChangedBinding(hk.obj)
 		}
+		*/
 	}
 	
 	_ProfileChanged(){
+		val := this._ProfileSelect.value
+		OutputDebug % "RADical._ProfileChanged START, profile='" val "'"
+		this.CurrentProfile := val
+		
+		for name, obj in this._PersistentControls {
+			if (!obj._ProfileSpecific){
+				continue
+			}
+			; Load new Control value for this profile
+			OutputDebug % "ProfileChanged: Loading persistent setting for " obj.name
+			obj._LoadValue()
+		}
+
+		/*
 		OutputDebug % "ProfileChanged : Processing change to profile " this._ProfileSelect.value
 		this.CurrentProfile := this._ProfileSelect.value
 		;ToolTip % this._ProfileSelect.value
@@ -236,9 +293,12 @@ class _radical {
 			OutputDebug % "ProfileChanged: Loading hotkey setting for " name ", value = " val
 			hk.obj.value := val
 		}
+		*/
+		OutputDebug % "RADical._ProfileChanged END"
 	}
 	
 	_BuildProfileDDL(){
+		/*
 		this._Profiles := ["Default"]
 		profile_list := this.IniRead("!Settings", "ProfileList", "")
 		profile_arr := StrSplit(profile_list, "|")
@@ -248,8 +308,10 @@ class _radical {
 		GuiControl, , % this._ProfileSelect._hwnd, % "|Default|" profile_list
 		GuiControl, choose,  % this._ProfileSelect._hwnd, % this.CurrentProfile
 		this._ProfileChanged()
+		*/
 	}
 	
+	/*
 	_AddProfile(){
 		InputBox, new_name, " " , Enter new profile name ,,200 ,130,,,,,
 		if (ErrorLevel = 0){
@@ -369,6 +431,7 @@ class _radical {
 			}
 		}
 	}
+	*/
 
 	; Checks that a new profile name is valid
 	_IsValidNewProfileName(profile){
@@ -433,6 +496,7 @@ class _radical {
 		
 		; Wraps GuiControl to use hwnds and function binding etc
 		GuiControl(cmd := "", ctrl := "", Param3 := ""){
+			/*
 			m := SubStr(cmd,1,1)
 			if (m = "+" || m = "-"){
 				; Options
@@ -444,9 +508,10 @@ class _radical {
 					return this
 				}
 			} else {
+			*/
 				GuiControl, % this._hwnd ":" cmd, % ctrl._hwnd, % Param3
 				return this
-			}
+			;}
 		}
 
 		; Wraps GuiControlGet
@@ -458,13 +523,15 @@ class _radical {
 		; ----------------------------- GUI Control class ---------------------------
 		class _CGuiControl {
 			__New(parent, ctrltype, options := "", text := ""){
-				this._Parent := parent
-				this._CtrlType := ctrltype
-				this.Name := 0
-				this._glabel := 0
-				this._DefaultValue := ""
+				this._Parent := parent		; Parent of this class
+				this._root := parent._root	; this._root should always point to the root RADical class instance.
+				this._CtrlType := ctrltype	; Egit "Edit", "DDL" etc
+				this.Name := 0				; The name of the GuiControl
+				this._glabel := 0			; The callback to be called on Control Change
+				this._DefaultValue := ""	; The default value for the control (When reading from the Settings file)
 				this._updating := 0			; Set to 1 when writing to GuiControl, to stop it writing to the settings file
-				this._ForceSection := ""	; Used to store setting not by profile, but in the settings section
+				;this._ForceSection := ""	; Used to store setting not by profile, but in the settings section
+				this._ProfileSpecific := 1	; Whether the control is a Profile Specific (Saved in current profile's section) or a Global Control (Saved in !Settings section)
 				
 				Gui, % this._parent._hwnd ":Add", % ctrltype, % "hwndhwnd " options, % text
 				this._hwnd := hwnd
@@ -491,6 +558,8 @@ class _radical {
 			}
 		
 			_OnChange(){
+				OutputDebug % "GuiControl._OnChange START: '" this.name "'"
+				/*
 				; Update persistent settings
 				if (this.Name){
 					; Write settings to file
@@ -506,20 +575,57 @@ class _radical {
 					
 					; Call user glabel
 					if (ObjHasKey(this,"_glabel") && this._glabel != 0){
+						OutputDebug % "CGuiControl._OnChange: Firing callback for " this.name
 						;%this._glabel%() ; ahk v2
 						this._glabel.() ; ahk v1
 					}
 				}
+				*/
+				
+				if (this.Name){
+					this._parent._root.IniWrite(this.value, this._GetSectionName(this), this.Name, this._DefaultValue)
+					
+					; Call user glabel
+					if (ObjHasKey(this,"_glabel") && this._glabel != 0){
+						OutputDebug % "CGuiControl._OnChange: Firing callback for " this.name
+						;%this._glabel%() ; ahk v2
+						this._glabel.() ; ahk v1
+					}
+				}
+				
+				OutputDebug % "GuiControl._OnChange END: '" this.name "'"
 			}
 			
 			; Internal MakePersistent - section is static, not dictated by current profile
-			_MakePersistent(Section, name, Default, glabel := 0){
+			;_MakePersistent(Section, name, Default, glabel := 0){
+			_MakePersistent(name, Default, glabel := 0){
+				;OutputDebug % "_GuiControl._MakePersistent START: Name = '" name "'"
+				this._ProfileSpecific := 0
+				this.MakePersistent(name, Default, glabel)
+				/*
 				this._ForceSection := Section
 				this.MakePersistent(name, Default, glabel)
+				*/
 			}
 			
 			; Makes a Gui Control persistent - value is saved in settings file
 			MakePersistent(Name, Default := "", glabel := 0){
+				OutputDebug % "_GuiControl.MakePersistent START: Name= '" name "', Profile Specific= " this._ProfileSpecific ", CtrlType: " this._CtrlType
+				this.Name := Name
+				this._glabel := glabel
+
+				; If Ctrl Type is a ListBox, Combobox etc, load values from settings now
+				if (this._IsListType(this._CtrlType)){
+					;this._parent.GuiControl("", this, "A|B|C")
+					val := this._root.IniRead(this._GetSectionName(this), this.Name "List", this._DefaultValue)
+					; Populate Items
+					GuiControl,, % this._hwnd, % val
+				}
+				; Set Default Value
+				this._DefaultValue := Default
+				; Add to list of Persistent controls
+				this._root._PersistentControls[name] := this
+				/*
 				; ToDo: Check for uniqueness of name
 				OutputDebug % "MakePersistent: Name = " name ", Default = " Default
 				this.Name := Name
@@ -530,10 +636,38 @@ class _radical {
 				;if (!this._ForceSection){
 					this._parent._root._PersistentControls[name] := this
 				;}
+				*/
+				OutputDebug % "_GuiControl.MakePersistent END"
+			}
+			
+			_GetSectionName(obj){
+				if (obj._ProfileSpecific){
+					return this._root.CurrentProfile
+				} else {
+					return "!Settings"
+				}
+			}
+			
+			; Is the GuiControl a list type that requires loading of the list in addition to selecting the current value?
+			_IsListType(Type){
+				if (Type = "DDL" || Type = "DropDownList" || Type = "ComboBox"){
+					return 1
+				} else {
+					return 0
+				}
 			}
 
 			; Loads the value for a control from an INI file.
 			_LoadValue(){
+				if (this._ProfileSpecific){
+					Section := this._root.CurrentProfile
+				} else {
+					Section := "!Settings"
+				}
+				OutputDebug % "_GuiControl._LoadValue START: name= '" this.Name "', Section: " Section
+				val := this._root.IniRead(Section, this.Name, this._DefaultValue)
+				this.value := val
+				/*
 				this._updating := 1
 				if (this._ForceSection){
 					Section := this._ForceSection
@@ -543,13 +677,15 @@ class _radical {
 				this.value := this._parent._root.IniRead(Section, this.Name, this._DefaultValue)
 				OutputDebug % "Loading Value for " this.name ", profile: " Section ", value = " this.value
 				this._updating := 0
+				*/
 			}
 			
 		}
 		
 		; Client command to add a hotkey
 		AddHotkey(name, callback, options, default){
-			OutputDebug % "AddHotkey: Name = " name ", Default = " Default
+			;OutputDebug % "AddHotkey: Name = " name ", Default = " Default
+			/*
 			this._root._Hotkeys[name] := {}
 			fn := this._HotkeyChangedBinding.Bind(this)
 			this._root._Hotkeys[name].callback := callback
@@ -558,10 +694,12 @@ class _radical {
 			this._root._Hotkeys[name].obj := hk
 			this._root._Hotkeys[name].ctrl := this
 			return hk
+			*/
 		}
 
 		; A Hotkey changed binding
 		_HotkeyChangedBinding(hkobj){
+			/*
 			;ToolTip % hkobj.Value
 			if (ObjHasKey(this._root._Hotkeys[hkobj.name], "binding") && this._root._Hotkeys[hkobj.name].binding){
 				cls := ""
@@ -610,10 +748,12 @@ class _radical {
 			; Update INI File
 			this._root.IniWrite(hkobj.Value, this._root.CurrentProfile, hkobj.name, hkobj._DefaultValue)
 			OutputDebug % "BINDING: " hkobj._Value ", DEF: " hkobj._DefaultValue
+			*/
 		}
 		
 		; A bound hotkey changed state (ie was pressed or released)
 		_HotkeyChangedState(hkobj, event){
+			/*
 			; Block duplicate down events for hotkeys
 			if (hkobj._state = event){
 				return
@@ -621,6 +761,7 @@ class _radical {
 			hkobj._state := event
 			; Fire callback
 			this._root._Hotkeys[hkobj.name].callback.(event)
+			*/
 		}
 	}
 	
