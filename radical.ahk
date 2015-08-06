@@ -9,11 +9,12 @@ ToDo:
 * _HotkeyChangedBinding fires twice on profile change
 To do with _AssociatedAppChanged
 
+* Why do Statusbar contents not show at start?
+
 * Associated App - uncheck and disable AssociatedAppSwitch if another profile exists that shares the same class.
 
 * Profiles system
 + Streamline Add / Delete / Copy / Rename code
-+ Allow Auto switching of profiles based upon active application
 
 * Callbacks for events
 eg Tab Changed, Profile Changed
@@ -71,10 +72,9 @@ class MyClient extends RADical {
 		fn := this.SettingChanged.bind(this)
 		this.MyEdit.MakePersistent("MyEdit", "Settings Editbox", fn)
 		
-		;this.RADical.Tabs.Settings.Gui("Add", "Text", "xm yp+30 w300", "3) Press the hotkey you bound.`nA tooltip will appear with the contents of the box on key down, and will disappear on key up. Also note that the settings for the boxes change when you switch profiles.")
-		this.MyDDL := this.RADical.Tabs.Settings.Gui("Add", "DDL", "xm yp+30", "One|Two")
-		;this.MyDDL.MakePersistent("MyDDL", "One", fn)
-		this.MyDDL.MakePersistent("MyDDL", "One")
+		this.RADical.Tabs.Settings.Gui("Add", "Text", "xm yp+30 w300", "3) Press the hotkey you bound.`nA tooltip will appear with the contents of the box on key down, and will disappear on key up. Also note that the settings for the boxes change when you switch profiles.")
+		;this.MyDDL := this.RADical.Tabs.Settings.Gui("Add", "DDL", "xm yp+30", "One|Two")
+		;this.MyDDL.MakePersistent("MyDDL", "One")
 
 	}
 	
@@ -149,7 +149,7 @@ class _radical {
 		Gui, % this._hwnds.MainWindow ":Show", % "x0 y0 w" this._GuiSize.w " h" this._GuiSize.h
 		
 		; Add Status Bar
-		Gui, % this._hwnds.MainWindow ":Add", StatusBar,, Blah blah blah
+		Gui, % this._hwnds.MainWindow ":Add", StatusBar
 		
 		; Create list of Tabs - client script should have defined required number of tabs by now
 		tabs := ""
@@ -234,6 +234,7 @@ class _radical {
 		fn := this._ActiveWindowChanged.Bind(this)
 		OnMessage( MsgNum, fn )
 
+		this._SetStatusbarText()
 		OutputDebug % "RADical._StartupDone END"
 		OutputDebug % " "
 	}
@@ -294,6 +295,7 @@ class _radical {
 		val := this._ProfileSelect.value
 		OutputDebug % "RADical._ProfileChanged START, profile='" val "'"
 		this.CurrentProfile := val
+		this._SetStatusbarText()
 		
 		for name, obj in this._PersistentControls {
 			if (!obj._ProfileSpecific){
@@ -309,8 +311,11 @@ class _radical {
 			OutputDebug % "ProfileChanged: Loading hotkey setting for " name ", value = " val
 			hk.obj.value := val
 		}
-
 		OutputDebug % "RADical._ProfileChanged END"
+	}
+	
+	_SetStatusbarText(){
+		SB_SetText("Current Profile: " this.CurrentProfile)
 	}
 	
 	; Builds the profile DDL, and handles associated tasks
