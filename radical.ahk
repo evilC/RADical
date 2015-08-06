@@ -71,7 +71,11 @@ class MyClient extends RADical {
 		fn := this.SettingChanged.bind(this)
 		this.MyEdit.MakePersistent("MyEdit", "Settings Editbox", fn)
 		
-		this.RADical.Tabs.Settings.Gui("Add", "Text", "xm yp+30 w300", "3) Press the hotkey you bound.`nA tooltip will appear with the contents of the box on key down, and will disappear on key up. Also note that the settings for the boxes change when you switch profiles.")
+		;this.RADical.Tabs.Settings.Gui("Add", "Text", "xm yp+30 w300", "3) Press the hotkey you bound.`nA tooltip will appear with the contents of the box on key down, and will disappear on key up. Also note that the settings for the boxes change when you switch profiles.")
+		this.MyDDL := this.RADical.Tabs.Settings.Gui("Add", "DDL", "xm yp+30", "One|Two")
+		;this.MyDDL.MakePersistent("MyDDL", "One", fn)
+		this.MyDDL.MakePersistent("MyDDL", "One")
+
 	}
 	
 	; User-defined routine to call when any of the persistent settings change
@@ -312,7 +316,7 @@ class _radical {
 	; Builds the profile DDL, and handles associated tasks
 	_BuildProfileDDL(){
 		this._Profiles := []
-		profile_list := this.IniRead("!Settings", "CurrentProfileList", "")
+		profile_list := this.IniRead("!Settings", "CurrentProfileList", "Default")
 		profile_arr := StrSplit(profile_list, "|")
 		
 		this._BuildAssociatedAppList()
