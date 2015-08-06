@@ -34,6 +34,9 @@ Help page?
 test := new MyClient()
 return
 
+GuiClose:
+	ExitApp
+
 ; Example client script.
 ; When a hotkey is pressed, send the contents of the edit box
 ; Allow the end user to choose any hotkey, but specify a default of F12
@@ -652,6 +655,3 @@ class _radical {
 	}
 	
 }
-
-GuiClose:
-	ExitApp
