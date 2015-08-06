@@ -278,6 +278,12 @@ class _radical {
 			obj._LoadValue()
 		}
 
+		for name, hk in this._Hotkeys {
+			val := this.IniRead(this.CurrentProfile, Name, hk.obj._DefaultValue)
+			OutputDebug % "ProfileChanged: Loading hotkey setting for " name ", value = " val
+			hk.obj.value := val
+		}
+
 		/*
 		OutputDebug % "ProfileChanged : Processing change to profile " this._ProfileSelect.value
 		this.CurrentProfile := this._ProfileSelect.value
@@ -685,7 +691,6 @@ class _radical {
 		; Client command to add a hotkey
 		AddHotkey(name, callback, options, default){
 			;OutputDebug % "AddHotkey: Name = " name ", Default = " Default
-			/*
 			this._root._Hotkeys[name] := {}
 			fn := this._HotkeyChangedBinding.Bind(this)
 			this._root._Hotkeys[name].callback := callback
@@ -694,7 +699,6 @@ class _radical {
 			this._root._Hotkeys[name].obj := hk
 			this._root._Hotkeys[name].ctrl := this
 			return hk
-			*/
 		}
 
 		; A Hotkey changed binding
