@@ -187,7 +187,7 @@ class _radical {
 		this._ProfileSelect._MakePersistent("!Settings", "CurrentProfile", "Default", fn)
 		
 		; Associated App
-		this.Tabs.Profiles.Gui("Add", "GroupBox", "x1 yp+30 R3.5 w295", "Associated Application:     (NOT IMPLIMENTED YET) ")
+		this.Tabs.Profiles.Gui("Add", "GroupBox", "x1 yp+30 R3.5 w295", "Associated Application:")
 		this.Tabs.Profiles.Gui("Add", "Text", "x10 yp+20", "ahk_class: ")
 		this._AssociatedAppEdit := this.Tabs.Profiles.Gui("Add", "Edit", "xp+60 yp-3 w175")
 		
@@ -197,7 +197,7 @@ class _radical {
 		this._AssociatedAppLimit := this.Tabs.Profiles.Gui("Add", "Checkbox", "x10 yp+25", "Limit hotkeys to only work in Associated App")
 		this._AssociatedAppLimit.MakePersistent("AssociatedAppLimit", 0, fn)
 		
-		this._AssociatedAppSwitch := this.Tabs.Profiles.Gui("Add", "Checkbox", "x10 yp+20", "Switch to this profile when Associated App is active")
+		this._AssociatedAppSwitch := this.Tabs.Profiles.Gui("Add", "Checkbox", "x10 yp+20 disabled", "Switch to this profile when Associated App is active")
 		this._AssociatedAppSwitch.MakePersistent("AssociatedAppSwitch", 0, fn)
 		
 		; Load non-client GUI elements values
@@ -559,6 +559,11 @@ class _radical {
 		_HotkeyChangedBinding(hkobj){
 			;ToolTip % hkobj.Value
 			if (ObjHasKey(this._root._Hotkeys[hkobj.name], "binding") && this._root._Hotkeys[hkobj.name].binding){
+				cls := ""
+				if (ObjHasKey(this._root._Hotkeys[hkobj.name], "winactive") && this._root._Hotkeys[hkobj.name].winactive){
+					cls := this._root._Hotkeys[hkobj.name].winactive
+				}
+				hotkey, IfWinActive, % cls
 				; hotkey already bound, un-bind first
 				hotkey, % this._root._Hotkeys[hkobj.name].binding, Off
 				hotkey, % this._root._Hotkeys[hkobj.name].binding " up", Off
@@ -568,6 +573,14 @@ class _radical {
 			}
 			; Bind new hotkey
 			this._root._Hotkeys[hkobj.name].binding := hkobj.Value
+			
+			
+			cls := ""
+			if (this._root._AssociatedAppLimit.Value && this._root._AssociatedAppEdit.Value){
+				cls := "ahk_class " this._root._AssociatedAppEdit.Value
+			}
+			this._root._Hotkeys[hkobj.name].winactive := cls
+			hotkey, IfWinActive, % cls
 			
 			if (hkobj.Value){
 				; Bind Down Event
