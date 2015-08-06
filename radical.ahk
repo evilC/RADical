@@ -274,9 +274,10 @@ class _radical {
 		}
 	}
 	
+	; One of the Associated Apps settings changed
 	_AssociatedAppChanged(){
 		; Associated app settings were changed
-		
+		this._BuildAssociatedAppList()
 		; Rebind hotkeys
 		for name, hk in this._Hotkeys {
 			hk.ctrl._HotkeyChangedBinding(hk.obj)
@@ -314,7 +315,18 @@ class _radical {
 		profile_list := this.IniRead("!Settings", "CurrentProfileList", "")
 		profile_arr := StrSplit(profile_list, "|")
 		
+		this._BuildAssociatedAppList()
+		
+		;GuiControl, , % this._ProfileSelect._hwnd, % "|Default|" profile_list
+		GuiControl, , % this._ProfileSelect._hwnd, % "|" profile_list
+		GuiControl, choose,  % this._ProfileSelect._hwnd, % this.CurrentProfile
+		;this._ProfileChanged()
+	}
+	
+	_BuildAssociatedAppList(){
 		this._AssociatedApps := {}
+		profile_list := this.IniRead("!Settings", "CurrentProfileList", "")
+		profile_arr := StrSplit(profile_list, "|")
 		Loop % profile_arr.length() {
 			profile := profile_arr[A_Index]
 			this._Profiles.push(profile)
@@ -335,20 +347,6 @@ class _radical {
 			;this._AssociatedApps[
 			;MsgBox % "Profile: " profile_arr[A_Index] ", app: " AssociatedAppClass
 		}
-		
-		/*
-		; Build List of Associated Apps per profile
-		this._AssociatedApps := {}
-		Loop % this._Profiles.length(){
-			; Find associated app for this profile
-			;MsgBox % this._Profiles[A_Index]
-		}
-		*/
-
-		;GuiControl, , % this._ProfileSelect._hwnd, % "|Default|" profile_list
-		GuiControl, , % this._ProfileSelect._hwnd, % "|" profile_list
-		GuiControl, choose,  % this._ProfileSelect._hwnd, % this.CurrentProfile
-		;this._ProfileChanged()
 	}
 	
 	_AddProfile(){
