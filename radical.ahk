@@ -697,16 +697,17 @@ class _radical {
 				return
 			}
 			OutputDebug % "Tab._HotkeyChangedBinding: name='" hkobj.name "', value='" hkobj.Value "'"
-			app := ""
 			if (ObjHasKey(this._root._Hotkeys[hkobj.name], "binding") && this._root._Hotkeys[hkobj.name].binding){
-				;OutputDebug % "OLD BINIDNG EXISTS"
+				app := ""
 				if (ObjHasKey(this._root._Hotkeys[hkobj.name], "AssociatedApp") && this._root._Hotkeys[hkobj.name].AssociatedApp){
-					;OutputDebug % "REMOVING OLD BINDING - HK: " this._root._Hotkeys[hkobj.name].binding " APP: " this._root._Hotkeys[hkobj.name].AssociatedApp
-					hotkey, IfWinActive, % "ahk_class " this._root._Hotkeys[hkobj.name].AssociatedApp
+					;OutputDebug % "OLD BINDING HAD CLASS: " this._root._Hotkeys[hkobj.name].AssociatedApp
+					app := "ahk_class " this._root._Hotkeys[hkobj.name].AssociatedApp
 				}
+				hotkey, IfWinActive, % app
+				;OutputDebug % "OLD BINIDNG EXISTS: " this._root._Hotkeys[hkobj.name].binding
 				hotkey, % this._root._Hotkeys[hkobj.name].binding, Off
+				hotkey, % this._root._Hotkeys[hkobj.name].binding " up", Off
 			}
-			;OutputDebug % "SETTING NEW BINDING"
 			
 			app := ""
 			cls := ""
@@ -717,6 +718,7 @@ class _radical {
 			this._root._Hotkeys[hkobj.name].Binding := hkobj.Value
 			this._root._Hotkeys[hkobj.name].AssociatedApp := cls
 			hotkey, IfWinActive, % app
+			;OutputDebug % "NEW BINDING HAS CLASS: " app
 			
 			if (hkobj.Value){
 				; Bind Down Event
