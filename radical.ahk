@@ -705,8 +705,10 @@ class _radical {
 				}
 				hotkey, IfWinActive, % app
 				;OutputDebug % "OLD BINIDNG EXISTS: " this._root._Hotkeys[hkobj.name].binding
-				hotkey, % this._root._Hotkeys[hkobj.name].binding, Off
-				hotkey, % this._root._Hotkeys[hkobj.name].binding " up", Off
+				try {
+					hotkey, % this._root._Hotkeys[hkobj.name].binding, Off
+					hotkey, % this._root._Hotkeys[hkobj.name].binding " up", Off
+				}
 			}
 			
 			app := ""
@@ -717,6 +719,7 @@ class _radical {
 			}
 			this._root._Hotkeys[hkobj.name].Binding := hkobj.Value
 			this._root._Hotkeys[hkobj.name].AssociatedApp := cls
+			this._root._Hotkeys[hkobj.name]._IsJoystick := hkobj._IsJoystick
 			hotkey, IfWinActive, % app
 			;OutputDebug % "NEW BINDING HAS CLASS: " app
 			
@@ -726,10 +729,12 @@ class _radical {
 				hotkey, % hkobj.Value, % fn
 				hotkey, % hkobj.Value, On
 				
-				; Bind Up Event
-				fn := this._HotkeyChangedState.bind(this, hkobj, 0)
-				hotkey, % hkobj.Value " up", % fn
-				hotkey, % hkobj.Value " up", On
+				if (hkobj._IsJoystick != 1){
+					; Bind Up Event
+					fn := this._HotkeyChangedState.bind(this, hkobj, 0)
+					hotkey, % hkobj.Value " up", % fn
+					hotkey, % hkobj.Value " up", On
+				}
 			}
 			this._root.IniWrite(hkobj.Value, this._root.CurrentProfile, hkobj.name, hkobj._DefaultValue)
 		}
@@ -741,8 +746,18 @@ class _radical {
 				return
 			}
 			hkobj._state := event
-			; Fire callback
+			
+			; Fire callback - make asynch?
 			this._root._Hotkeys[hkobj.name].callback.(event)
+			
+			; Simulate Joystick up event support
+			if (hkobj._IsJoystick && event){
+				val := hkobj.Value
+				while (GetKeyState(val)){
+					sleep 10
+				}
+				this._HotkeyChangedState(hkobj, 0)
+			}
 		}
 	}
 	
