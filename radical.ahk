@@ -696,7 +696,7 @@ class _radical {
 			if (this._root._StartingUp){
 				return
 			}
-			OutputDebug % "Tab._HotkeyChangedBinding: name='" hkobj.name "'"
+			OutputDebug % "Tab._HotkeyChangedBinding: name='" hkobj.name "', value='" hkobj.Value "'"
 			app := ""
 			if (ObjHasKey(this._root._Hotkeys[hkobj.name], "binding") && this._root._Hotkeys[hkobj.name].binding){
 				;OutputDebug % "OLD BINIDNG EXISTS"
@@ -729,6 +729,7 @@ class _radical {
 				hotkey, % hkobj.Value " up", % fn
 				hotkey, % hkobj.Value " up", On
 			}
+			this._root.IniWrite(hkobj.Value, this._root.CurrentProfile, hkobj.name, hkobj._DefaultValue)
 		}
 		
 		; A bound hotkey changed state (ie was pressed or released)
