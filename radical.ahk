@@ -34,8 +34,10 @@ class RADical {
 	class _RADical {
 		__New(clientclass){
 			this._Settings := new this._SettingsHandler()
-			this._Settings.RegisterSetting("CurrentProfile", "Radical Profiles", "CurrentProfile", "Default")
-			this._Settings.RegisterSetting("ProfileList", "Radical Profiles", "ProfileList", {Default: 1, Test: 1})
+			;this._Settings.RegisterSetting("CurrentProfile", "Radical Profiles", "CurrentProfile", "Default")
+			;this._Settings.RegisterSetting("ProfileList", "Radical Profiles", "ProfileList", {Default: 1, Test: 1})
+			this._Settings.RegisterGlobal("CurrentProfile", "Default")
+			this._Settings.RegisterGlobal("ProfileList", {Default: 1, Test: 1})
 			this._ClientClass := clientclass
 			
 			; Instantiate Hotkey Class
@@ -60,7 +62,7 @@ class RADical {
 		Init(){
 			list := this._BuildProfileList()
 			GuiControl, , % this._hProfilesDDL, % list
-			GuiControl, Choose, % this._hProfilesDDL, % this._Settings.CurrentProfile
+			GuiControl, Choose, % this._hProfilesDDL, % this._Settings.GetGlobal("CurrentProfile")
 		}
 		
 		; User command to add a new hotkey
@@ -70,13 +72,13 @@ class RADical {
 		
 		_ProfileDDLChanged(){
 			GuiControlGet, val ,, % this._hProfilesDDL
-			this._Settings.CurrentProfile := val
+			this._Settings.SetGlobal("CurrentProfile", val)
 		}
 		
 		_BuildProfileList(){
 			list := "Default"
 			;for profile in this._ProfileList {
-			for profile in this._Settings.ProfileList {
+			for profile in this._Settings.GetGlobal("ProfileList") {
 				if (profile = "default"){
 					continue
 				}
@@ -86,7 +88,7 @@ class RADical {
 		}
 
 		class _SettingsHandler{
-			_shst := 1	; disable setter at startup
+			;_shst := 1	; disable setter at startup
 			__New(){
 				SplitPath, % A_ScriptName,,,,ScriptName
 				this._ININame := ScriptName ".ini"
@@ -94,37 +96,40 @@ class RADical {
 				; Instantiate JSON class
 				this.JSON := new JSON()
 
-				this._RegisteredSettings := {}
-				this._Settings := {}
-				
-				; Re-enable setter
-				this.Delete("_shst")
+				this._GlobalOptions := {}
+				this._GlobalValues := {}
 			}
 			
-			RegisterSetting(setting, section, key, default := ""){
-				obj := {Section: section, key: key, Default: default}
+			; Global Settings - Not influenced by profiles
+			RegisterGlobal(setting, default){
+				obj := {Section: "Global Settings", key: key, Default: default}
 				obj.obj := IsObject(Default)
-				this._RegisteredSettings[setting] := obj
+				this._GlobalOptions[setting] := obj
 			}
 			
-			__Get(setting){
-				if (!ObjHasKey(this._Settings, setting) && ObjHasKey(this._RegisteredSettings, setting)){
-					this._Settings[setting] := this._ReadSetting(this._RegisteredSettings[setting].Section, setting, this._RegisteredSettings[setting].Default)
+			GetGlobal(setting){
+				if (!ObjHasKey(this._GlobalValues, setting) && ObjHasKey(this._GlobalOptions, setting)){
+					this._GlobalValues[setting] := this._ReadSetting(this._GlobalOptions[setting].Section, setting, this._GlobalOptions[setting].Default)
 				}
-				return this._Settings[setting]
+				return this._GlobalValues[setting]
 			}
 			
-			__Set(setting, value){
-				if (setting != "_shst" && !ObjHasKey(this, "_shst")){
-					OutputDebug % "SET " setting
-					this._Settings[setting] := value
-					; Write setting to disk
-					; Do not halt execution - disk may be spun down and we do not want to lock up program.
-					;fn := this._WriteSetting.Bind(this, value, this._RegisteredSettings[setting].Section, this._RegisteredSettings[setting].key, this._RegisteredSettings[setting].Default)
-					; Kick off write in dummy "Thread"
-					;SetTimer, % fn, -0
-					this._WriteSetting(value, this._RegisteredSettings[setting].Section, this._RegisteredSettings[setting].key, this._RegisteredSettings[setting].Default)
-				}
+			SetGlobal(setting, value){
+				this._GlobalValues[setting] := value
+				this._WriteSetting(value, this._GlobalOptions[setting].Section, setting, this._GlobalOptions[setting].Default)
+			}
+
+			; Per Profile settings - values will vary depending upon current profile
+			RegisterPerProfile(setting, Default){
+				
+			}
+			
+			GetPerProfile(setting){
+				
+			}
+			
+			SetPerProfile(setting, value){
+				
 			}
 			
 			_ReadSetting(section, key, default := ""){
