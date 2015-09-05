@@ -33,13 +33,11 @@ class RADical {
 	
 	class _RADical {
 		__New(clientclass){
+			this._Settings := new this._SettingsHandler()
+			this._Settings.RegisterSetting("CurrentProfile", "Radical Profiles", "CurrentProfile", "Default")
+			this._Settings.RegisterSetting("ProfileList", "Radical Profiles", "ProfileList", {Default: 1, Test: 1})
 			this._ClientClass := clientclass
 			
-			SplitPath, % A_ScriptName,,,,ScriptName
-			this._ININame := ScriptName ".ini"
-			; Instantiate JSON class
-			this.JSON := new JSON()
-
 			; Instantiate Hotkey Class
 			this._HotkeyClass := new this.HotClass({disablejoystickhats: 1}) ; Disable joystick hats for now as timers interfere with debugging
 
@@ -48,39 +46,21 @@ class RADical {
 			
 			Gui, Add, Tab2, w310 , Main|Settings|Profiles
 			
-			; Profiles
-			this._CurrentProfile := this._ReadSetting("Radical Profiles", "CurrentProfile", "Default")
-			this._ProfileList := this.JSON.Load(this._ReadSetting("Radical Profiles", "ProfileList", "{""default"": 1, ""blah"": 1}"))
-
 			Gui, Tab, Profiles
 			Gui, Add, DDL, w250 hwndhwnd
+			fn := this._ProfileDDLChanged.Bind(this)
+			GuiControl +g, % hwnd, % fn
 			this._hProfilesDDL := hwnd
 			
 			; Default to main
 			Gui, Tab, Main
 
 		}
-		
-		_ReadSetting(section, key, default := ""){
-			IniRead, val, % this._ININame, % section, % key, % A_Space
-			if (val = ""){
-				val := default
-			}
-			return val
-		}
-		
-		_WriteSetting(value, section, key, default := ""){
-			if (value = default){
-				IniDelete, % this._ININame, % section, % key
-			} else {
-				IniWrite, % value, % this._ININame, % section, % key
-			}
-		}
-		
+
 		Init(){
 			list := this._BuildProfileList()
 			GuiControl, , % this._hProfilesDDL, % list
-			GuiControl, Choose, % this._hProfilesDDL, % this._CurrentProfile
+			GuiControl, Choose, % this._hProfilesDDL, % this._Settings.CurrentProfile
 		}
 		
 		; User command to add a new hotkey
@@ -88,9 +68,15 @@ class RADical {
 			this._HotkeyClass.AddHotkey(name, callback, aParams*)
 		}
 		
+		_ProfileDDLChanged(){
+			GuiControlGet, val ,, % this._hProfilesDDL
+			this._Settings.CurrentProfile := val
+		}
+		
 		_BuildProfileList(){
 			list := "Default"
-			for profile in this._ProfileList {
+			;for profile in this._ProfileList {
+			for profile in this._Settings.ProfileList {
 				if (profile = "default"){
 					continue
 				}
@@ -99,6 +85,70 @@ class RADical {
 			return list
 		}
 
+		class _SettingsHandler{
+			_shst := 1	; disable setter at startup
+			__New(){
+				SplitPath, % A_ScriptName,,,,ScriptName
+				this._ININame := ScriptName ".ini"
+				
+				; Instantiate JSON class
+				this.JSON := new JSON()
+
+				this._RegisteredSettings := {}
+				this._Settings := {}
+				
+				; Re-enable setter
+				this.Delete("_shst")
+			}
+			
+			RegisterSetting(setting, section, key, default := ""){
+				obj := {Section: section, key: key, Default: default}
+				obj.obj := IsObject(Default)
+				this._RegisteredSettings[setting] := obj
+			}
+			
+			__Get(setting){
+				if (!ObjHasKey(this._Settings, setting) && ObjHasKey(this._RegisteredSettings, setting)){
+					this._Settings[setting] := this._ReadSetting(this._RegisteredSettings[setting].Section, setting, this._RegisteredSettings[setting].Default)
+				}
+				return this._Settings[setting]
+			}
+			
+			__Set(setting, value){
+				if (setting != "_shst" && !ObjHasKey(this, "_shst")){
+					OutputDebug % "SET " setting
+					this._Settings[setting] := value
+					; Write setting to disk
+					; Do not halt execution - disk may be spun down and we do not want to lock up program.
+					;fn := this._WriteSetting.Bind(this, value, this._RegisteredSettings[setting].Section, this._RegisteredSettings[setting].key, this._RegisteredSettings[setting].Default)
+					; Kick off write in dummy "Thread"
+					;SetTimer, % fn, -0
+					this._WriteSetting(value, this._RegisteredSettings[setting].Section, this._RegisteredSettings[setting].key, this._RegisteredSettings[setting].Default)
+				}
+			}
+			
+			_ReadSetting(section, key, default := ""){
+				IniRead, val, % this._ININame, % section, % key, % A_Space
+				if (val = ""){
+					val := default
+				} else {
+					if (this._RegisteredSettings[setting].obj){
+						val := this.JSON.Load(val)
+					}
+				}
+				return val
+			}
+			
+			_WriteSetting(value, section, key, default := ""){
+				if (value = default){
+					IniDelete, % this._ININame, % section, % key
+				} else {
+					IniWrite, % value, % this._ININame, % section, % key
+				}
+			}
+			
+
+		}
 		#include <HotClass>
 	}
 }
