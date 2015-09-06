@@ -48,7 +48,7 @@ class RADical {
 			
 			this.JSON := new JSON()
 			; Instantiate Hotkey Class
-			this._HotkeyClass := new this.HotClass({disablejoystickhats: 1}) ; Disable joystick hats for now as timers interfere with debugging
+			this._HotkeyClass := new this.HotClass({disablejoystickhats: 1, StartActive: 0, OnChangeCallback: this._HotkeyChanged.Bind(this)}) ; Disable joystick hats for now as timers interfere with debugging
 
 			Gui +hwndhwnd
 			this.hwnd := hwnd
@@ -77,6 +77,8 @@ class RADical {
 			
 			GuiControl, , % this._hProfilesDDL, % list
 			GuiControl, Choose, % this._hProfilesDDL, % this._CurrentProfile
+			
+			this._HotkeyClass.EnableeHotkeys()
 		}
 
 		_ProfileDDLChanged(){
@@ -136,6 +138,10 @@ class RADical {
 			; Write new entry for this profile
 			profile := this.JSON.Dump(profile)
 			this._WriteSetting(profile, "User Profiles", this._CurrentProfile, "{}")
+		}
+		
+		_HotkeyChanged(name, value){
+			OutputDebug % "HotkeyChanged: " name " = " value
 		}
 		
 		AddGui(name, ctrltype, options := "", default := "", callback := ""){
