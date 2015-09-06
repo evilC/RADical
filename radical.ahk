@@ -1,3 +1,46 @@
+OutputDebug, DBGVIEWCLEAR
+
+; Example user script ======================================================================================================
+#SingleInstance force ; Only one copy of this script can run at once
+
+; insantiate your class
+mc := new MyClass()
+return
+
+; Exit the Script when the GUI closes
+GuiClose:
+	ExitApp
+	return
+
+; Extend the RADical base class, place your startup code in a function called StartUp()
+class MyClass extends RADical {
+	StartUp(){
+		; This will get called once at StartUp. Use it to add your Gui Items and initialize values.
+		
+		; Create an EditBox and specify that it fires your callback func when it changes
+		this.MyEdit := this.RADical.AddGui("MyEdit", "Edit", "w200 xm yp", "myeditdefault", this.MyEditChanged.Bind(this))
+		Loop 3 {
+			name := "hk" A_Index
+			; Create a Hotkey, and specify that it fires your callback func when the hotkey changes State (is pressed or released)
+			this.RADical.AddHotkey(name, this.MyHotkeyChangedState.Bind(this, A_Index), "w280 xm yp+30")
+		}
+	}
+	
+	; User Script functions -------------------------------------------------
+	; callback function for when a hotkey changes state
+	MyHotkeyChangedState(hk, event){
+		; For hotkey callbacks, an extra parameter is passed to denote the event (0 = went up, 1 = went down)
+		ToolTip % "hk " hk " - " event
+		SoundBeep
+	}
+	
+	; callback function for when the EditBox changes (including when it gets loaded from a profile)
+	MyEditChanged(){
+		ToolTip % "Edit Value: " this.MyEdit.value
+	}
+}
+
+; RADical library ===========================================================================================================
 /*
 RADical
 A Library to enable rapid development of GuiFied AHK scripts.
@@ -7,42 +50,7 @@ A Library to enable rapid development of GuiFied AHK scripts.
 * User settings (GuiControls and Hotkeys) are saved in a settings file and are persistent.
 * Provides a Profiles system to enable the end-user to switch between sets of settings.
 */
-
-OutputDebug, DBGVIEWCLEAR
-
-; Example user script ======================================================================================================
-#SingleInstance force
-
-mc := new MyClass()
-return
-
-GuiClose:
-	ExitApp
-	return
-
-class MyClass extends RADical {
-	; This is called once at StartUp. Use it to add your Gui Items and initialize values.
-	StartUp(){
-		this.MyEdit := this.RADical.AddGui("MyEdit", "Edit", "w200 xm yp", "myeditdefault", this.EditChanged.Bind(this))
-		Loop 3 {
-			name := "hk" A_Index
-			this.RADical.AddHotkey(name, this.hkPressed.Bind(this, A_Index), "w280 xm yp+30")
-		}
-	}
-	
-	; This will get fired when a hotkey that the user bound is pressed.
-	hkPressed(hk, event){
-		ToolTip % "hk " hk " - " event
-		SoundBeep
-	}
-	
-	; This will get fired when the contents of the EditBox change (including when it gets loaded from a profile)
-	EditChanged(){
-		ToolTip % "Edit Value: " this.MyEdit.value
-	}
-}
-
-; RADical library ===========================================================================================================
+; Wrapper class, the user script will derive from this class
 class RADical {
 	; Bootstrap function. Orchestrates startup and loads the main RADical library.
 	__New(){
