@@ -23,7 +23,7 @@ class MyClass extends RADical {
 	}
 	
 	EditChanged(){
-		ToolTip % this.MyEdit.value
+		ToolTip % "Edit Value: " this.MyEdit.value
 	}
 }
 
@@ -41,12 +41,14 @@ class RADical {
 			SplitPath, % A_ScriptName,,,,ScriptName
 			this._ININame := ScriptName ".ini"
 
+			this._SettingChangedFunc := this.__SettingChanged.Bind(this)
 			this.ProfileData := {}
 			this._ClientClass := clientclass
 			
 			this._GuiControls := {}
-			
+			this._Hotkeys := {}
 			this.JSON := new JSON()
+			
 			; Instantiate Hotkey Class
 			this._HotkeyClass := new this.HotClass({disablejoystickhats: 1, StartActive: 0, OnChangeCallback: this._HotkeyChanged.Bind(this)}) ; Disable joystick hats for now as timers interfere with debugging
 
@@ -60,41 +62,111 @@ class RADical {
 			fn := this._ProfileDDLChanged.Bind(this)
 			GuiControl +g, % hwnd, % fn
 			this._hProfilesDDL := hwnd
+
+			this._LoadSettings()
 			
 			; Default to main
 			Gui, Tab, Main
+			
+			
+		}
 
-			; Get Profile List
-			this._ProfileList := this.JSON.Load(this._ReadSetting("Global Settings", "ProfileList", "{""Default"":1"))
-			this._CurrentProfile := this._ReadSetting("Global Settings", "CurrentProfile", "Default")
-			for profile in this._ProfileList {
-				this.ProfileData[profile] := this.JSON.Load(this._ReadSetting("User Profiles", profile, "{}"))
+		; Initialize.
+		; Fire off profile load
+		Init(){
+			GuiControl, , % this._hProfilesDDL, % this._BuildProfileList()
+			GuiControl, Choose, % this._hProfilesDDL, % this._Settings.CurrentProfile
+			this._ChangeProfile(this._Settings.CurrentProfile)
+			this._HotkeyClass.EnableHotkeys()
+		}
+
+		AddGui(name, ctrltype, options := "", default := "", callback := ""){
+			gui := new this._GuiControl(this, name, ctrltype, options, default, callback)
+			this._GuiControls[name] := gui
+			return gui
+		}
+
+		AddHotkey(name, callback, aParams*){
+			this._Hotkeys[name] := this._HotkeyClass.AddHotkey(name, callback, aParams*)
+		}
+
+		_LoadSettings(){
+			FileRead, str, % this._ININame
+			if (!str){
+				this._Settings := {CurrentProfile: "Default", Profiles: {}}
+				this._CreateProfile("Default")
+				this._CreateProfile("TestProfile")
+			} else {
+				this._Settings := this.JSON.Load(str)
 			}
 		}
-
-		Init(){
-			list := this._BuildProfileList()
-			
-			GuiControl, , % this._hProfilesDDL, % list
-			GuiControl, Choose, % this._hProfilesDDL, % this._CurrentProfile
-			
-			this._HotkeyClass.EnableeHotkeys()
+		
+		; Creates an entry in the Settings profile list.
+		_CreateProfile(profile){
+			this._Settings.Profiles[profile] := {GuiControls: {}, Hotkeys: {}}
 		}
-
+		
+		; This should be called after any setting (something in this._Settings) changes.
+		_SettingChanged(){
+			; Asynchronously fire write to disk
+			;fn := this._SettingChangedFunc
+			;SetTimer, % fn, -0
+			this.__SettingChanged()
+		}
+		
+		; Asynchronously called to write settings file to disk
+		__SettingChanged(){
+			str := this.JSON.Dump(this._Settings, true)
+			file := FileOpen(this._ININame, "w")
+			file.Write(str)
+			file.Close()
+		}
+		
+		_HotkeyChanged(name, value){
+			this._Settings.Profiles[this._Settings.CurrentProfile].Hotkeys[name] := value
+			OutputDebug % "Hotkey " Name " changed. new value: " value[1].code
+			this._SettingChanged()
+		}
+		
+		; Called when profile changes (including on start)
+		_ChangeProfile(profile){
+			; Iterate through GuiControls and Hotkeys, set them to new value
+			for name, obj in this._GuiControls {
+				;obj.value := "aaa"
+				newval := this._Settings.Profiles[profile].GuiControls[name]
+				obj.value := newval
+			}
+			
+			; Iterate through Hotkeys
+			for name, obj in this._Hotkeys {
+				newval := this._Settings.Profiles[profile].Hotkeys[name]
+				;obj.value := newval
+				this._HotkeyClass.SetHotkey(name, newval)
+				;OutputDebug % "HK: " newval[1].code
+			}
+		}
+		
+		; Called when the Profile Select DDL changes
 		_ProfileDDLChanged(){
 			GuiControlGet, val ,, % this._hProfilesDDL
-			this._CurrentProfile := val
-			this._WriteSetting(val, "Global Settings", "CurrentProfile", "Default")
-			; Update Gui Controls
-			for name, obj in this._GuiControls {
-				obj._LoadValue()
-			}
+			this._Settings.CurrentProfile := val
+			this._SettingChanged()
+			this._ChangeProfile(val)
 		}
 
+		; Called when a GuiControl changes state due to a user changing it
+		_ControlChanged(name, value){
+			this._Settings.Profiles[this._Settings.CurrentProfile].GuiControls[name] := value
+			this._SettingChanged()
+		}
+
+
+		; Builds a | delimited list of profiles for the Profile Select DDL.
+		; Default is always first
 		_BuildProfileList(){
 			list := "Default"
 			;for profile in this._ProfileList {
-			for profile in this._ProfileList {
+			for profile in this._Settings.Profiles {
 				if (profile = "default"){
 					continue
 				}
@@ -103,105 +175,56 @@ class RADical {
 			return list
 		}
 
-		_ReadSetting(section, key, default := ""){
-			IniRead, val, % this._ININame, % section, % key, % A_Space
-			if (val = ""){
-				val := default
-			} else {
-				if (this._RegisteredSettings[setting].obj){
-					val := this.JSON.Load(val)
-				}
-			}
-			return val
-		}
-
-		_WriteSetting(value, section, key, default := ""){
-			fn := this.__WriteSetting.Bind(this, value, section, key, default)
-			SetTimer, % fn, -0
-		}
-		
-		__WriteSetting(value, section, key, default := ""){
-			if (value = default){
-				IniDelete, % this._ININame, % section, % key
-			} else {
-				IniWrite, % value, % this._ININame, % section, % key
-			}
-		}
-
-		_ControlChanged(name, value){
-			this.ProfileData[this._CurrentProfile, name] := value
-			; Remove entries that are default settings
-			profile := this.ProfileData[this._CurrentProfile].clone()
-			if (value = this._GuiControls[name]._default){
-				profile.Delete(name)
-			}
-			; Write new entry for this profile
-			profile := this.JSON.Dump(profile)
-			this._WriteSetting(profile, "User Profiles", this._CurrentProfile, "{}")
-		}
-		
-		_HotkeyChanged(name, value){
-			OutputDebug % "HotkeyChanged: " name " = " value
-		}
-		
-		AddGui(name, ctrltype, options := "", default := "", callback := ""){
-			gui := new this._GuiControl(this, name, ctrltype, options, default, callback)
-			this._GuiControls[name] := gui
-			return gui
-		}
-		
-		AddHotkey(name, callback, aParams*){
-			this._HotkeyClass.AddHotkey(name, callback, aParams*)
-		}
-
 		class _GuiControl{
 			__New(handler, name, ctrltype, options := "", default := "", callback := ""){
-				this._loading := 1
 				this._handler := handler
 				this._default := Default
 				this.Name := name
+				this._SetByValue := 0
 				if (IsObject(callback)){
 					this._Callback := callback
 				}
 				Gui, Add, % ctrltype, % "hwndhwnd " options
 				this.hwnd := hwnd
 
-				this._LoadValue()
-
 				fn := this._OnChange.Bind(this)
 				GuiControl +g, % this.hwnd, % fn
-				this._loading := 0
 			}
-			
 			__Get(param){
 				if (param = "value"){
 					return this._value
 				}
 			}
 			
-			;__Set(){
-				; ToDo: Implement setter
-			;}
-			
-			_LoadValue(){
-				if (ObjHasKey(this._handler.ProfileData[this._handler._CurrentProfile], this.Name)){
-					this._value := this._handler.ProfileData[this._handler._CurrentProfile, this.name]
-				} else {
-					this._value := this._default
+			__Set(param, value){
+				if (param = "value"){
+					this._value := value
+					this._SetByValue := 1
+					; Trigger write of settings file etc.
+					OutputDebug % "Guicontrol __Set: Updating GuiControl " this.name " to " value
+					; Trigger update of GuiControl
+					GuiControl, , % this.hwnd, % value
+					return this._value
 				}
-				GuiControl, , % this.hwnd, % this._value
 			}
 			
+			; Called when a GuiControl changes.
+			; If this._SetByValue is set, then this change was due to it's value being set by the handler, so do not fire the handler's callback
 			_OnChange(){
-				GuiControlGet, val ,, % this.hwnd
-				this._value := val
-				; Trigger Settings File Update
-				this._handler._ControlChanged(this.Name, val)
+				if (!this._SetByValue){
+					GuiControlGet, val ,, % this.hwnd
+					OutputDebug % "GuiControl " this.name " OnChange Event. Firing Settings Change. New value: " val
+					this._value := val
+					this._handler._ControlChanged(this.Name, val)
+				}
+				; Trigger Callback
 				if (IsObject(this._callback)){
 					this._Callback.()
 				}
+				this._SetByValue := 0
 			}
 		}
+
 		#include <HotClass>
 	}
 }
