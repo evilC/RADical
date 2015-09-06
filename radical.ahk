@@ -1,5 +1,17 @@
-#SingleInstance force
+/*
+RADical
+A Library to enable rapid development of GuiFied AHK scripts.
+
+* Allows the end-user to easily bind hotkeys (keyboard, joystick, mouse buttons) to script actions.
+* Allows the author to easily provide the end user with GuiControls that customize script behavior.
+* User settings (GuiControls and Hotkeys) are saved in a settings file and are persistent.
+* Provides a Profiles system to enable the end-user to switch between sets of settings.
+*/
+
 OutputDebug, DBGVIEWCLEAR
+
+; Example user script ======================================================================================================
+#SingleInstance force
 
 mc := new MyClass()
 return
@@ -9,34 +21,57 @@ GuiClose:
 	return
 
 class MyClass extends RADical {
+	; This is called once at StartUp. Use it to add your Gui Items and initialize values.
 	StartUp(){
+		this.MyEdit := this.RADical.AddGui("MyEdit", "Edit", "w200 xm yp", "myeditdefault", this.EditChanged.Bind(this))
 		Loop 3 {
 			name := "hk" A_Index
-			this.RADical.AddHotkey(name, this.hkPressed.Bind(this, A_Index), "w280 xm y" A_Index * 30)
+			this.RADical.AddHotkey(name, this.hkPressed.Bind(this, A_Index), "w280 xm yp+30")
 		}
-		this.MyEdit := this.RADical.AddGui("MyEdit", "Edit", "w200 yp+30", "myeditdefault", this.EditChanged.Bind(this))
 	}
 	
+	; This will get fired when a hotkey that the user bound is pressed.
 	hkPressed(hk, event){
 		ToolTip % "hk " hk " - " event
 		SoundBeep
 	}
 	
+	; This will get fired when the contents of the EditBox change (including when it gets loaded from a profile)
 	EditChanged(){
 		ToolTip % "Edit Value: " this.MyEdit.value
 	}
 }
 
-
+; RADical library ===========================================================================================================
 class RADical {
+	; Bootstrap function. Orchestrates startup and loads the main RADical library.
 	__New(){
+		; Fire the constructor of the main RADical class, and store it's instance on this.RADical of the user's script.
 		this.RADical := new this._RADical(this)
+		; Fire the StartUp method of the user script to allow them to add GuiControls etc.
 		this.StartUp()
+		; Show the Gui
 		Gui, Show, x0 y0
-		this.RADical.Init()
+		; Initialize RADical - Load Settings, configure GuiControls + Hotkeys etc.
+		this.RADical._Init()
 	}
 	
+	; Main Radical Library
 	class _RADical {
+		; Public Functions ----------------------------------------------------------------------------------------------
+		; User Script wants to add a Gui Control
+		AddGui(name, ctrltype, options := "", default := "", callback := ""){
+			gui := new this._GuiControl(this, name, ctrltype, options, default, callback)
+			this._GuiControls[name] := gui
+			return gui
+		}
+
+		; User script wants to add a Hotkey
+		AddHotkey(name, callback, aParams*){
+			this._Hotkeys[name] := this._HotkeyClass.AddHotkey(name, callback, aParams*)
+		}
+		
+		; Private Functions ----------------------------------------------------------------------------------------------
 		__New(clientclass){
 			SplitPath, % A_ScriptName,,,,ScriptName
 			this._ININame := ScriptName ".ini"
@@ -74,22 +109,10 @@ class RADical {
 		; Initialize.
 		; Fire off profile load
 		; Build profiles DDL
-		Init(){
+		_Init(){
 			GuiControl, , % this._hProfilesDDL, % this._BuildProfileList()
 			GuiControl, Choose, % this._hProfilesDDL, % this._Settings.CurrentProfile
 			this._ChangeProfile(this._Settings.CurrentProfile)
-		}
-
-		; User Script wants to add a Gui Control
-		AddGui(name, ctrltype, options := "", default := "", callback := ""){
-			gui := new this._GuiControl(this, name, ctrltype, options, default, callback)
-			this._GuiControls[name] := gui
-			return gui
-		}
-
-		; User script wants to add a Hotkey
-		AddHotkey(name, callback, aParams*){
-			this._Hotkeys[name] := this._HotkeyClass.AddHotkey(name, callback, aParams*)
 		}
 
 		; Set initial state of persistent settings
