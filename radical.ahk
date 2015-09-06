@@ -10,13 +10,11 @@ GuiClose:
 
 class MyClass extends RADical {
 	StartUp(){
-		/*
 		Loop 3 {
 			name := "hk" A_Index
-			this.RADical.AddHotkey(name, this.hkPressed.Bind(this, A_Index), "w280 xm")
+			this.RADical.AddHotkey(name, this.hkPressed.Bind(this, A_Index), "w280 xm y" A_Index * 30)
 		}
-		*/
-		this.MyEdit := this.RADical.AddGui("MyEdit", "Edit", "w200", "myeditdefault", this.EditChanged.Bind(this))
+		this.MyEdit := this.RADical.AddGui("MyEdit", "Edit", "w200 yp+30", "myeditdefault", this.EditChanged.Bind(this))
 	}
 	
 	hkPressed(hk, event){
@@ -50,9 +48,9 @@ class RADical {
 			
 			this.JSON := new JSON()
 			; Instantiate Hotkey Class
-			;this._HotkeyClass := new this.HotClass({disablejoystickhats: 1}) ; Disable joystick hats for now as timers interfere with debugging
+			this._HotkeyClass := new this.HotClass({disablejoystickhats: 1}) ; Disable joystick hats for now as timers interfere with debugging
 
-			Gui, new, hwndhwnd
+			Gui +hwndhwnd
 			this.hwnd := hwnd
 			
 			Gui, Add, Tab2, w310 , Main|Settings|Profiles
@@ -145,6 +143,10 @@ class RADical {
 			this._GuiControls[name] := gui
 			return gui
 		}
+		
+		AddHotkey(name, callback, aParams*){
+			this._HotkeyClass.AddHotkey(name, callback, aParams*)
+		}
 
 		class _GuiControl{
 			__New(handler, name, ctrltype, options := "", default := "", callback := ""){
@@ -194,7 +196,7 @@ class RADical {
 				}
 			}
 		}
-
+		#include <HotClass>
 	}
 }
 #include <JSON>
