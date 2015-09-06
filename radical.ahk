@@ -73,23 +73,26 @@ class RADical {
 
 		; Initialize.
 		; Fire off profile load
+		; Build profiles DDL
 		Init(){
 			GuiControl, , % this._hProfilesDDL, % this._BuildProfileList()
 			GuiControl, Choose, % this._hProfilesDDL, % this._Settings.CurrentProfile
 			this._ChangeProfile(this._Settings.CurrentProfile)
-			this._HotkeyClass.EnableHotkeys()
 		}
 
+		; User Script wants to add a Gui Control
 		AddGui(name, ctrltype, options := "", default := "", callback := ""){
 			gui := new this._GuiControl(this, name, ctrltype, options, default, callback)
 			this._GuiControls[name] := gui
 			return gui
 		}
 
+		; User script wants to add a Hotkey
 		AddHotkey(name, callback, aParams*){
 			this._Hotkeys[name] := this._HotkeyClass.AddHotkey(name, callback, aParams*)
 		}
 
+		; Set initial state of persistent settings
 		_LoadSettings(){
 			FileRead, str, % this._ININame
 			if (!str){
@@ -122,6 +125,7 @@ class RADical {
 			file.Close()
 		}
 		
+		; The user changed the binding of a hotkey
 		_HotkeyChanged(name, value){
 			this._Settings.Profiles[this._Settings.CurrentProfile].Hotkeys[name] := value
 			OutputDebug % "Hotkey " Name " changed. new value: " value[1].code
@@ -133,17 +137,16 @@ class RADical {
 			; Iterate through GuiControls and Hotkeys, set them to new value
 			for name, obj in this._GuiControls {
 				;obj.value := "aaa"
-				newval := this._Settings.Profiles[profile].GuiControls[name]
-				obj.value := newval
+				obj.value := this._Settings.Profiles[profile].GuiControls[name]
 			}
 			
-			; Iterate through Hotkeys
+			; Iterate through Hotkeys, set them to new value
+			this._HotkeyClass.DisableHotkeys()
 			for name, obj in this._Hotkeys {
-				newval := this._Settings.Profiles[profile].Hotkeys[name]
-				;obj.value := newval
-				this._HotkeyClass.SetHotkey(name, newval)
+				this._HotkeyClass.SetHotkey(name, this._Settings.Profiles[profile].Hotkeys[name])
 				;OutputDebug % "HK: " newval[1].code
 			}
+			this._HotkeyClass.EnableHotkeys()
 		}
 		
 		; Called when the Profile Select DDL changes
@@ -175,6 +178,8 @@ class RADical {
 			return list
 		}
 
+		; Wraps a guicontrol
+		; Fires the _ControlChanged method of the handler class if the value of the Control Changes through user interaction.
 		class _GuiControl{
 			__New(handler, name, ctrltype, options := "", default := "", callback := ""){
 				this._handler := handler
@@ -190,14 +195,17 @@ class RADical {
 				fn := this._OnChange.Bind(this)
 				GuiControl +g, % this.hwnd, % fn
 			}
+			
 			__Get(param){
 				if (param = "value"){
+					; GuiControl value was requested
 					return this._value
 				}
 			}
 			
 			__Set(param, value){
 				if (param = "value"){
+					; Set of GuiControl by handler - update guicontrol, but do not fire the handler's _ControlChanged method
 					this._value := value
 					this._SetByValue := 1
 					; Trigger write of settings file etc.
@@ -209,7 +217,8 @@ class RADical {
 			}
 			
 			; Called when a GuiControl changes.
-			; If this._SetByValue is set, then this change was due to it's value being set by the handler, so do not fire the handler's callback
+			; If this._SetByValue is set, then this change was due to it's value being set by the handler, so do not fire the handler's _ControlChanged method
+			; Otherwise, it is the user changing the value - fire the handler's _ControlChanged method
 			_OnChange(){
 				if (!this._SetByValue){
 					GuiControlGet, val ,, % this.hwnd
@@ -217,7 +226,7 @@ class RADical {
 					this._value := val
 					this._handler._ControlChanged(this.Name, val)
 				}
-				; Trigger Callback
+				; Trigger Callback - the value changed from the user's perspective - so fire the callback to let his script know
 				if (IsObject(this._callback)){
 					this._Callback.()
 				}
@@ -225,8 +234,8 @@ class RADical {
 			}
 		}
 
-		#include <HotClass>
+		#include <HotClass> ; https://github.com/evilC/HotClass/
 	}
 }
-#include <JSON>
+#include <JSON> ; http://ahkscript.org/boards/viewtopic.php?f=6&t=627
 
