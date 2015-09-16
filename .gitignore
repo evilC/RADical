@@ -5,6 +5,7 @@
 *.scc
 *.png
 *.tmp.*
+*.bak
 Setup.ahk
 !Setup*.exe
 !*.Demo.exe
