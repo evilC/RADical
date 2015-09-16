@@ -6,6 +6,7 @@
 ; Class MUST be called RADicalClient for static auto-instantiate trick to work
 class RADicalClient extends RADical {
 	; Configure RADical - this is called before the GUI is created. Set RADical options etc here.
+
 	Config(){
 		; Add required tab(s)
 		RADical.Tabs(["Tab A", "Tab B"])
@@ -112,7 +113,7 @@ class _RADical {
 			}
 			tablist .= this._Tabs[A_Index]
 		}
-		Gui, Add, Tab2, w320 h240 hwndhTab, % tablist
+		Gui, Add, Tab2, w320 h240 hwndhTab -Wrap, % tablist
 		colors := {"Tab A": "FF0000", "Tab B": "0000FF", "Profiles": "00FF00"}	; debugging - remove
 		Loop % this._Tabs.length(){
 			tabname := this._Tabs[A_Index]
