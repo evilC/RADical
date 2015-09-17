@@ -56,7 +56,6 @@ class _RADical {
 	
 	; Adds a persistent GuiControl
 	GuiAdd(name, callback, ctrltype, options := "", text := "", Default := ""){
-		;this.GuiControls[name] := new this._PersistentGuiControl(callback, ctrltype, options, text, Default)
 		this.GuiControls[name] := new this._PersistentGuiControl(this._ClientGuiControlChanged.Bind(this, name), ctrltype, options, text, Default)
 		this.GuiControls[name]._ClientCallback := callback
 		return this.GuiControls[name]
@@ -77,8 +76,12 @@ class _RADical {
 		; Speed Optimizations
 		SetBatchLines -1
 		
-		; Default Title to Script Name without the .ahk extension
-		title := StrSplit(A_ScriptName, ".ahk")
+		; Default Title to Script Name without the .ahk / .exe extension
+		if (A_IsCompiled){
+			title := StrSplit(A_ScriptName, ".exe")
+		} else {
+			title := StrSplit(A_ScriptName, ".ahk")
+		}
 		this._Title := title[1]
 		
 		; Initialize values
@@ -89,7 +92,8 @@ class _RADical {
 		this.Hotkeys := {}
 		this.GuiControls := {}
 		this._GuiSettings := {PosX: {_PHDefaultValue: 0}, PosY: {_PHDefaultValue: 0}, PosW: {_PHDefaultValue: 350}, PosH: {_PHDefaultValue: 250}}
-		this.HotClass := new HotClass({OnChangeCallback: this._HotkeyChanged.Bind(this), disablejoystickhats: 1})
+		this.HotClass := new HotClass({OnChangeCallback: this._HotkeyChanged.Bind(this)})
+		;this.HotClass := new HotClass({OnChangeCallback: this._HotkeyChanged.Bind(this), disablejoystickhats: 1}) ; Disabling Joystick hats stops the Timer interrupting debugging
 		this.HotClass.DisableHotkeys()
 	}
 	
