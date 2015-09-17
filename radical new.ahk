@@ -92,10 +92,15 @@ class _RADical {
 	_TabFrameHwnds := {}			; Hwnds of the Textboxes that are the parents of the Child Guis inside the tabs
 	_TabGuiHwnds := {}				; Hwnds of the child GUIs inside the tabs
 	__New(clientscript){
+		; Speed Optimizations
+		SetBatchLines -1
+		
+		; Initialize values
 		this._ClientScript := clientscript
 		Gui, +Resize
 		Gui, +Hwndhwnd
 		this._MainHwnd := hwnd
+		this._GuiSettings := {PosX: {_PHDefaultValue: 0}, PosY: {_PHDefaultValue: 0}}
 	}
 	
 	; Sets up the GUI ready for the Client Script to add it's own GuiControls
@@ -131,13 +136,23 @@ class _RADical {
 		}
 		Attach(hTab,"w1 h1")
 		fn := this._OnSize.Bind(this)
-		OnMessage(0x0005, fn)
+		OnMessage(0x0005, fn)	; WM_SIZE
 		
 		this.Tab("Profiles")
 		this._ProfileHandler := new ProfileHandler()
 		
 		; Set Default Gui as Child Gui of first Client Tab
 		this.Tab(this._ClientTabs[1])
+	}
+
+	; Finish startup process
+	_Start(){
+		this._ProfileHandler.Init({Global: {GuiSettings: this._GuiSettings}})
+		; ToDo: Check if coords lie outside screen area and move On-Screen if so.
+		Gui, % this._GuiCmd("Show"), % "x" this._GuiSettings.PosX.value " y" this._GuiSettings.PosY.value
+		; Hook into WM_MOVE after window is shown
+		fn := this._OnMove.Bind(this)
+		OnMessage(0x0003, fn)	; WM_MOVE
 	}
 
 	; Sizes child Guis in Tabs to fill size of tab
@@ -152,11 +167,19 @@ class _RADical {
 			dllcall("MoveWindow", "Ptr", this._TabGuiHwnds[tabname], "int", 0,"int", 0, "int", W, "int", H, "Int", 1)
 		}
 	}
-
-	; Finish startup process
-	_Start(){
-		this._ProfileHandler.Init()
-		Gui, % this._GuiCmd("Show"), x0 y0
+	
+	; Called when window moves. Store new coords in settings file
+	_OnMove(wParam, lParam, msg, hwnd){
+		if (hwnd != this._MainHwnd){
+			return
+		}
+		;this._GuiSettings.PosX.value := (lParam & 0xffff) - 45
+		;this._GuiSettings.PosY.value := (lParam >> 16) - 45
+		; wParam and lParam are coords of the CLIENT area, and we want window position. Use WinGetPos instead
+		WinGetPos, x, y
+		this._GuiSettings.PosX.value := x
+		this._GuiSettings.PosY.value := y
+		this._ProfileHandler.SettingChanged()
 	}
 	
 	; Prefixes _MainHwnd hwnd to guicommand
