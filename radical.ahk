@@ -264,6 +264,6 @@ class _RADical {
 
 }
 
-#include <JSON>
-#include <ProfileHandler>
-#include <HotClass>
+#include <JSON>						; http://ahkscript.org/boards/viewtopic.php?t=627
+#include <ProfileHandler>			; https://github.com/evilC/ProfileHandler
+#include <HotClass>					; https://github.com/evilC/HotClass
