@@ -3,7 +3,8 @@
 ; ===========================================================================================================
 ; =====================================   SAMPLE CLIENT SCRIPT   ============================================
 ; ===========================================================================================================
-; Class MUST be called RADicalClient for static auto-instantiate trick to work
+rc := new RADicalClient()
+
 class RADicalClient extends RADical {
 	; Configure RADical - this is called before the GUI is created. Set RADical options etc here.
 
@@ -43,7 +44,7 @@ class RADicalClient extends RADical {
 ; Fires off class methods in pre-determined order
 class RADical {
 	__New(){
-		static autostart := new RADicalClient()	; Trick to automatically instantiate Client Script
+		;static autostart := new RADicalClient()	; Trick to automatically instantiate Client Script
 		OutputDebug DBGVIEWCLEAR
 		OutputDebug % "Instantiating RADical class..."
 		global RADical := new _radical(this)
@@ -113,13 +114,13 @@ class _RADical {
 			}
 			tablist .= this._Tabs[A_Index]
 		}
-		Gui, Add, Tab2, w320 h240 hwndhTab -Wrap, % tablist
+		Gui, Add, Tab2, w350 h240 hwndhTab -Wrap, % tablist
 		colors := {"Tab A": "FF0000", "Tab B": "0000FF", "Profiles": "00FF00"}	; debugging - remove
 		Loop % this._Tabs.length(){
 			tabname := this._Tabs[A_Index]
 			; Inject child gui into Tab
 			Gui, % this._GuiCmd("Tab"), % tabname
-			Gui, % this._GuiCmd("Add"), Text, % "hwndhwnd w300 h200"
+			Gui, % this._GuiCmd("Add"), Text, % "hwndhwnd w330 h200"
 			this._TabFrameHwnds[tabname] := hwnd
 			Gui, New, hwndhwnd -Caption
 			this._TabGuiHwnds[tabname] := hwnd
@@ -132,12 +133,18 @@ class _RADical {
 		fn := this._OnSize.Bind(this)
 		OnMessage(0x0005, fn)
 		
+		this.Tab("Profiles")
+		this._ProfileHandler := new ProfileHandler()
+		
 		; Set Default Gui as Child Gui of first Client Tab
 		this.Tab(this._ClientTabs[1])
 	}
 
 	; Sizes child Guis in Tabs to fill size of tab
-	_OnSize(wParam, lParam){
+	_OnSize(wParam, lParam, msg, hwnd){
+		if (hwnd != this._MainHwnd){
+			return
+		}
 		W := (lParam & 0xffff) - 45
 		H := (lParam >> 16) - 45
 		Loop % this._Tabs.length(){
@@ -148,6 +155,7 @@ class _RADical {
 
 	; Finish startup process
 	_Start(){
+		this._ProfileHandler.Init()
 		Gui, % this._GuiCmd("Show"), x0 y0
 	}
 	
@@ -161,3 +169,4 @@ class _RADical {
 
 #include <JSON>
 #include <Attach>
+#include <ProfileHandler>
