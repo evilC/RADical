@@ -100,7 +100,7 @@ class _RADical {
 		Gui, +Resize
 		Gui, +Hwndhwnd
 		this._MainHwnd := hwnd
-		this._GuiSettings := {PosX: {_PHDefaultValue: 0}, PosY: {_PHDefaultValue: 0}}
+		this._GuiSettings := {PosX: {_PHDefaultValue: 0}, PosY: {_PHDefaultValue: 0}, PosW: {_PHDefaultValue: 350}, PosH: {_PHDefaultValue: 250}}
 	}
 	
 	; Sets up the GUI ready for the Client Script to add it's own GuiControls
@@ -120,6 +120,7 @@ class _RADical {
 			tablist .= this._Tabs[A_Index]
 		}
 		Gui, Add, Tab2, w350 h240 hwndhTab -Wrap, % tablist
+		this.hTab := hTab
 		colors := {"Tab A": "FF0000", "Tab B": "0000FF", "Profiles": "00FF00"}	; debugging - remove
 		Loop % this._Tabs.length(){
 			tabname := this._Tabs[A_Index]
@@ -132,9 +133,7 @@ class _RADical {
 			Gui, % "+Parent" this._TabFrameHwnds[tabname]
 			Gui, Color, % colors[tabname]	; debugging - remove
 			Gui, Show
-			Attach(this._TabFrameHwnds[tabname],"w1 h1")
 		}
-		Attach(hTab,"w1 h1")
 		fn := this._OnSize.Bind(this)
 		OnMessage(0x0005, fn)	; WM_SIZE
 		
@@ -149,7 +148,7 @@ class _RADical {
 	_Start(){
 		this._ProfileHandler.Init({Global: {GuiSettings: this._GuiSettings}})
 		; ToDo: Check if coords lie outside screen area and move On-Screen if so.
-		Gui, % this._GuiCmd("Show"), % "x" this._GuiSettings.PosX.value " y" this._GuiSettings.PosY.value
+		Gui, % this._GuiCmd("Show"), % "x" this._GuiSettings.PosX.value " y" this._GuiSettings.PosY.value " w" this._GuiSettings.PosW.value " h" this._GuiSettings.PosH.value
 		; Hook into WM_MOVE after window is shown
 		fn := this._OnMove.Bind(this)
 		OnMessage(0x0003, fn)	; WM_MOVE
@@ -157,15 +156,22 @@ class _RADical {
 
 	; Sizes child Guis in Tabs to fill size of tab
 	_OnSize(wParam, lParam, msg, hwnd){
+		; ToDo: Use DeferWindowPos to reduce flicker?
 		if (hwnd != this._MainHwnd){
 			return
 		}
-		W := (lParam & 0xffff) - 45
-		H := (lParam >> 16) - 45
+		;critical
+		w := (lParam & 0xffff), h := (lParam >> 16), fw := w - 45, fh := h - 55, gw := w - 45, gh := h - 45
+		dllcall("MoveWindow", "Ptr", this.hTab, "int", 10,"int", 10, "int", w - 20, "int", h - 20, "Int", 1)
 		Loop % this._Tabs.length(){
 			tabname := this._Tabs[A_Index]
-			dllcall("MoveWindow", "Ptr", this._TabGuiHwnds[tabname], "int", 0,"int", 0, "int", W, "int", H, "Int", 1)
+			dllcall("MoveWindow", "Ptr", this._TabFrameHwnds[tabname], "int", 25,"int", 35, "int", fw, "int", fh, "Int", 1)
+			;ControlMove, % this._TabFrameHwnds[tabname], , , % w, % h
+			dllcall("MoveWindow", "Ptr", this._TabGuiHwnds[tabname], "int", 0,"int", 0, "int", gw, "int", gh, "Int", 1)
 		}
+		this._GuiSettings.PosW.value := w
+		this._GuiSettings.PosH.value := h
+		this._ProfileHandler.SettingChanged()
 	}
 	
 	; Called when window moves. Store new coords in settings file
@@ -191,5 +197,4 @@ class _RADical {
 }
 
 #include <JSON>
-#include <Attach>
 #include <ProfileHandler>
