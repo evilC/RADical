@@ -9,27 +9,20 @@ class RADicalClient extends RADical {
 	; Configure RADical - this is called before the GUI is created. Set RADical options etc here.
 
 	Config(){
-		; Add required tab(s)
-		RADical.Tabs(["Tab A", "Tab B"])
+		; Client Scripts can consist of more than one tab... Let's add two
+		RADical.Tabs(["Client Tab A", "Client Tab B"])
 	}
 	
 	; Called after Initialization - Assemble your GUI, set up your hotkeys etc here.
 	Init(){
 		Gui, Add, Text, w100 xm ym, Per-Profile Hotkey
 		RADical.AddHotkey("hk1", this.hk1Changed.Bind(this), "w200 xp+100 yp-2")
-		/*
-		; Place sample content in Tabs
-		Loop 10 {
-			Gui, Add, Edit, w300
-		}
 		
-		; Switch to second Tab
-		RADical.Tab("Tab B")
-		Loop 5 {
-			Gui, Add, Edit, w300
-		}
-		*/
-
+		Gui, Add, Text, w100 xm yp+30, Per-Profile EditBox
+		this.MyEdit := RADical.GuiAdd("MyEdit", this.MyEditChanged.Bind(this), "Edit", "w200 xp+100",,"Default Text")
+		
+		RADical.Tab("Client Tab B")
+		Gui, Add, Text, xm ym, Client Scripts can consist of more than one tab...
 	}
 	
 	; Once all setup is done, this function is called
@@ -38,7 +31,12 @@ class RADicalClient extends RADical {
 	}
 	
 	hk1Changed(event){
-		SoundBeep
+		events := {0: "Released", 1: "Pressed"}
+		tooltip % "Hotkey hk1 was " events[event]
+	}
+	
+	MyEditChanged(){
+		Tooltip % "MyEdit changed to: " this.MyEdit.value
 	}
 }
 
@@ -93,6 +91,14 @@ class _RADical {
 		this.Hotkeys[name] := this.HotClass.AddHotkey(name, callback, options)
 	}
 	
+	; Adds a persistent GuiControl
+	GuiAdd(name, callback, ctrltype, options := "", text := "", Default := ""){
+		;this.GuiControls[name] := new this._PersistentGuiControl(callback, ctrltype, options, text, Default)
+		this.GuiControls[name] := new this._PersistentGuiControl(this._ClientGuiControlChanged.Bind(this, name), ctrltype, options, text, Default)
+		this.GuiControls[name]._ClientCallback := callback
+		return this.GuiControls[name]
+	}
+	
 	; Closes the script. Also causes the script to exit on Gui Close
 	Exit(){
 		GuiClose:
@@ -114,6 +120,7 @@ class _RADical {
 		Gui, +Hwndhwnd
 		this._MainHwnd := hwnd
 		this.Hotkeys := {}
+		this.GuiControls := {}
 		this._GuiSettings := {PosX: {_PHDefaultValue: 0}, PosY: {_PHDefaultValue: 0}, PosW: {_PHDefaultValue: 350}, PosH: {_PHDefaultValue: 250}}
 		this.HotClass := new HotClass({OnChangeCallback: this._HotkeyChanged.Bind(this), disablejoystickhats: 1})
 		this.HotClass.DisableHotkeys()
@@ -166,7 +173,7 @@ class _RADical {
 	_Start(){
 		this.HotClass.DisableHotkeys()
 		; Why does this line stop debugging from working, and stop Gui coordinates being remembered?
-		this._ProfileHandler.Init({Global: {GuiSettings: this._GuiSettings}, PerProfile: {Hotkeys: this.Hotkeys}})
+		this._ProfileHandler.Init({Global: {GuiSettings: this._GuiSettings}, PerProfile: {Hotkeys: this.Hotkeys, GuiControls: this.GuiControls}})
 		;this._ProfileHandler.Init({Global: {GuiSettings: this._GuiSettings}})
 		; ToDo: Check if coords lie outside screen area and move On-Screen if so.
 		Gui, % this._GuiCmd("Show"), % "x" this._GuiSettings.PosX.value " y" this._GuiSettings.PosY.value " w" this._GuiSettings.PosW.value " h" this._GuiSettings.PosH.value
@@ -232,6 +239,55 @@ class _RADical {
 			; ... as this will cause the profile Handler to save the profile part way through loading
 			; ToDo: This seems a little hacky. Can it be improved?
 			this._ProfileHandler.SettingChanged()
+		}
+	}
+
+	; Called when a Client GuiControl changes
+	_ClientGuiControlChanged(name){
+		this._ProfileHandler.SettingChanged()
+		; Asynchronously fire Client Callback
+		fn := this.GuiControls[name]._ClientCallback
+		SetTimer, % fn, -0
+	}
+	
+	; ========================= GuiControl Wrapper ===================================
+	/*
+	This wraps GuiControls in a manner suitable for use with the ProfileHandler
+
+	It ensures that any get or set of the .value property sets or gets the contents of the GuiControl
+	First param specifies the "g-label" to call when the GuiControl changes through user interaction
+	Next, it accepts the normal params as would be used in a Gui, Add command (eg ControlType, Options, Text)
+	Next, it accepts a "Default" param to specify the Default Value
+	*/
+	class _PersistentGuiControl {
+		__New(callback, ctrltype, options := "", text := "", Default := ""){
+			this._PHDefaultValue := Default ; This property will be expected by the ProfileHandler class, and should contain the Default Value
+			this._callback := callback
+			Gui, Add, % ctrltype, % options " hwndhwnd", % text
+			this.hwnd := hwnd
+			fn := this.ControlChanged.Bind(this)
+			GuiControl +g, % hwnd, % fn
+		}
+		
+		; The control changed state either through user interaction, or through change of profile
+		ControlChanged(){
+			GuiControlGet, val, , % this.hwnd
+			this._value := val
+			this._callback.()
+		}
+		
+		; Getters and Setters.
+		; Trap Gets or sets of .value, and re-route to ._value
+		; On Set of .value, also change state of GuiControl
+		value[]{
+			get {
+				return this._value
+			}
+			
+			set {
+				GuiControl,, % this.hwnd, % value
+				return this._value := value
+			}
 		}
 	}
 
