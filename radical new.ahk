@@ -15,6 +15,9 @@ class RADicalClient extends RADical {
 	
 	; Called after Initialization - Assemble your GUI, set up your hotkeys etc here.
 	Init(){
+		Gui, Add, Text, w100 xm ym, Per-Profile Hotkey
+		RADical.AddHotkey("hk1", this.hk1Changed.Bind(this), "w200 xp+100 yp-2")
+		/*
 		; Place sample content in Tabs
 		Loop 10 {
 			Gui, Add, Edit, w300
@@ -25,12 +28,17 @@ class RADicalClient extends RADical {
 		Loop 5 {
 			Gui, Add, Edit, w300
 		}
+		*/
 
 	}
 	
 	; Once all setup is done, this function is called
 	Main(){
 		
+	}
+	
+	hk1Changed(event){
+		SoundBeep
 	}
 }
 
@@ -80,6 +88,11 @@ class _RADical {
 		}
 	}
 
+	; Add a hotkey
+	AddHotkey(name, callback, options := ""){
+		this.Hotkeys[name] := this.HotClass.AddHotkey(name, callback, options)
+	}
+	
 	; Closes the script. Also causes the script to exit on Gui Close
 	Exit(){
 		GuiClose:
@@ -100,7 +113,10 @@ class _RADical {
 		Gui, +Resize
 		Gui, +Hwndhwnd
 		this._MainHwnd := hwnd
+		this.Hotkeys := {}
 		this._GuiSettings := {PosX: {_PHDefaultValue: 0}, PosY: {_PHDefaultValue: 0}, PosW: {_PHDefaultValue: 350}, PosH: {_PHDefaultValue: 250}}
+		this.HotClass := new HotClass({OnChangeCallback: this._HotkeyChanged.Bind(this), disablejoystickhats: 1})
+		this.HotClass.DisableHotkeys()
 	}
 	
 	; Sets up the GUI ready for the Client Script to add it's own GuiControls
@@ -121,7 +137,7 @@ class _RADical {
 		}
 		Gui, Add, Tab2, w350 h240 hwndhTab -Wrap, % tablist
 		this.hTab := hTab
-		colors := {"Tab A": "FF0000", "Tab B": "0000FF", "Profiles": "00FF00"}	; debugging - remove
+		;colors := {"Tab A": "FF0000", "Tab B": "0000FF", "Profiles": "00FF00"}	; debugging - remove
 		Loop % this._Tabs.length(){
 			tabname := this._Tabs[A_Index]
 			; Inject child gui into Tab
@@ -131,7 +147,7 @@ class _RADical {
 			Gui, New, hwndhwnd -Caption
 			this._TabGuiHwnds[tabname] := hwnd
 			Gui, % "+Parent" this._TabFrameHwnds[tabname]
-			Gui, Color, % colors[tabname]	; debugging - remove
+			;Gui, Color, % colors[tabname]	; debugging - remove
 			Gui, Show
 		}
 		fn := this._OnSize.Bind(this)
@@ -139,6 +155,8 @@ class _RADical {
 		
 		this.Tab("Profiles")
 		this._ProfileHandler := new ProfileHandler()
+		this._ProfileHandler.SetPreLoadCallback(this._PreProfileLoad.Bind(this))
+		this._ProfileHandler.SetPostLoadCallback(this._PostProfileLoad.Bind(this))
 		
 		; Set Default Gui as Child Gui of first Client Tab
 		this.Tab(this._ClientTabs[1])
@@ -146,12 +164,16 @@ class _RADical {
 
 	; Finish startup process
 	_Start(){
-		this._ProfileHandler.Init({Global: {GuiSettings: this._GuiSettings}})
+		this.HotClass.DisableHotkeys()
+		; Why does this line stop debugging from working, and stop Gui coordinates being remembered?
+		this._ProfileHandler.Init({Global: {GuiSettings: this._GuiSettings}, PerProfile: {Hotkeys: this.Hotkeys}})
+		;this._ProfileHandler.Init({Global: {GuiSettings: this._GuiSettings}})
 		; ToDo: Check if coords lie outside screen area and move On-Screen if so.
 		Gui, % this._GuiCmd("Show"), % "x" this._GuiSettings.PosX.value " y" this._GuiSettings.PosY.value " w" this._GuiSettings.PosW.value " h" this._GuiSettings.PosH.value
 		; Hook into WM_MOVE after window is shown
 		fn := this._OnMove.Bind(this)
 		OnMessage(0x0003, fn)	; WM_MOVE
+		this.HotClass.EnableHotkeys()
 	}
 
 	; Sizes child Guis in Tabs to fill size of tab
@@ -193,8 +215,28 @@ class _RADical {
 		return this._MainHwnd ":" cmd
 	}
 	
-	;#include <HotClass>
+	; Put HotClass into IDLE state before loading hotkeys
+	_PreProfileLoad(){
+		this.HotClass.DisableHotkeys()
+	}
+	
+	; Put HotClass into ACTIVE state after loading hotkeys
+	_PostProfileLoad(){
+		this.HotClass.EnableHotkeys()
+	}
+
+	; Called when a Hotkey changes binding
+	_HotkeyChanged(aParams*){
+		if (!this._ProfileHandler.ProfileLoading){
+			; If ProfileHandler is loading a profile, do not fire SettingChanged...
+			; ... as this will cause the profile Handler to save the profile part way through loading
+			; ToDo: This seems a little hacky. Can it be improved?
+			this._ProfileHandler.SettingChanged()
+		}
+	}
+
 }
 
 #include <JSON>
 #include <ProfileHandler>
+#include <HotClass>
