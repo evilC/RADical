@@ -122,7 +122,12 @@ class _RADical {
 			Gui, % this._GuiCmd("Tab"), % tabname
 			Gui, % this._GuiCmd("Add"), Text, % "hwndhwnd w330 h200"
 			this._TabFrameHwnds[tabname] := hwnd
-			Gui, New, hwndhwnd -Caption
+			try {
+				; Experimental AHK scrollbar support
+				Gui, New, hwndhwnd -Caption +Scroll
+			} catch {
+				Gui, New, hwndhwnd -Caption
+			}
 			this._TabGuiHwnds[tabname] := hwnd
 			Gui, % "+Parent" this._TabFrameHwnds[tabname]
 			;Gui, Color, % colors[tabname]	; debugging - remove
@@ -161,7 +166,7 @@ class _RADical {
 			return
 		}
 		;critical
-		w := (lParam & 0xffff), h := (lParam >> 16), fw := w - 45, fh := h - 55, gw := w - 45, gh := h - 45
+		w := (lParam & 0xffff), h := (lParam >> 16), fw := w - 45, fh := h - 55, gw := w - 45, gh := h - 55
 		dllcall("MoveWindow", "Ptr", this.hTab, "int", 10,"int", 10, "int", w - 20, "int", h - 20, "Int", 1)
 		Loop % this._Tabs.length(){
 			tabname := this._Tabs[A_Index]

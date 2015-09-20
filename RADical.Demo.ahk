@@ -23,8 +23,17 @@ class RADicalClient extends RADical {
 		Gui, Add, Text, w100 xm yp+30, Per-Profile EditBox
 		this.MyEdit := RADical.GuiAdd("MyEdit", this.MyEditChanged.Bind(this), "Edit", "w200 xp+100",,"Default Text")
 		
+		Loop 10 {
+			Gui, Add, Edit, xm
+		}
+		
 		RADical.Tab("Client Tab B")
 		Gui, Add, Text, xm ym, Client Scripts can consist of more than one tab...
+		
+		Loop 20 {
+			Gui, Add, Edit, xm
+		}
+
 	}
 	
 	; Once all setup is done, this function is called
